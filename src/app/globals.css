@@ -10,14 +10,20 @@
   box-sizing: border-box;
 }
 
-html,
-body {
+html {
   margin: 0;
   min-height: 100%;
   background:
     radial-gradient(circle at top right, rgba(76, 201, 240, 0.12), transparent 42%),
     radial-gradient(circle at bottom left, rgba(249, 115, 22, 0.08), transparent 38%),
     #0b0f18;
+  background-attachment: fixed;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: transparent;
   color: #e9edf8;
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
 }

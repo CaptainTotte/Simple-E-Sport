@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 
 type ProfileClientProps = {
@@ -326,12 +327,6 @@ export default function ProfileClient({ name, username, profileImageUrl: initial
 
   return (
     <main className="container py-8">
-      <header className="mb-6">
-        <p className="text-xs uppercase tracking-[0.2em] text-muted">Profile</p>
-        <h1 className="mt-2 text-2xl font-semibold">{name}</h1>
-        <p className="mt-1 text-sm text-muted">@{username}</p>
-      </header>
-
       <section className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
         <aside className="panel h-fit lg:sticky lg:top-24">
           <p className="mb-3 text-xs uppercase tracking-[0.16em] text-muted">Sections</p>
@@ -354,37 +349,59 @@ export default function ProfileClient({ name, username, profileImageUrl: initial
           {activeView === "general" ? (
             <section className="panel">
               <h2 className="text-lg font-semibold">General</h2>
-              <p className="mt-1 text-sm text-muted">Profile settings</p>
-              <div className="mt-3">
-                <h3 className="text-base font-semibold">Profile</h3>
-                <div className="mt-3 flex flex-wrap items-center gap-3">
-                  <div className="h-20 w-20 overflow-hidden rounded-full border border-border/70 bg-[#141821]">
-                    {profileImageUrl ? (
-                      <img alt="Profile" className="h-full w-full object-cover" src={profileImageUrl} />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-xs text-muted">No image</div>
-                    )}
+              <p className="mt-1 text-sm text-muted">General account settings</p>
+              <article className="mt-3 rounded-lg border border-border/70 bg-[#141821] p-4">
+                <div className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
+                  <div className="flex flex-col items-start gap-1">
+                    <label className="group relative h-28 w-28 cursor-pointer overflow-hidden rounded-md border border-border/70 bg-[#0f1420]">
+                      {profileImageUrl ? (
+                        <img alt="Profile" className="h-full w-full object-cover" src={profileImageUrl} />
+                      ) : (
+                        <div className="flex h-full w-full items-center justify-center bg-[#10182a] text-xs font-semibold text-muted">
+                          No image
+                        </div>
+                      )}
+                      <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-xs font-semibold uppercase tracking-[0.12em] text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                        Change
+                      </div>
+                      <input
+                        accept="image/png,image/jpeg,image/webp"
+                        className="hidden"
+                        disabled={generalLoading}
+                        onChange={(event) => {
+                          const file = event.target.files?.[0];
+                          if (file) {
+                            void uploadProfileImage(file);
+                          }
+                          event.target.value = "";
+                        }}
+                        type="file"
+                      />
+                    </label>
                   </div>
-                  <label className="btn cursor-pointer">
-                    Upload Profile Image
-                    <input
-                      accept="image/png,image/jpeg,image/webp"
-                      className="hidden"
-                      disabled={generalLoading}
-                      onChange={(event) => {
-                        const file = event.target.files?.[0];
-                        if (file) {
-                          void uploadProfileImage(file);
-                        }
-                        event.target.value = "";
-                      }}
-                      type="file"
-                    />
-                  </label>
+                  <div className="min-w-0 rounded-lg border border-border/60 bg-[#111827] p-3">
+                    <p className="text-xs uppercase tracking-[0.1em] text-muted">Personal</p>
+                    <div className="mt-2 space-y-2 text-sm">
+                      <div className="flex items-center justify-between border-b border-border/50 pb-2">
+                        <span className="text-muted">Display Name</span>
+                        <span className="font-medium">{name}</span>
+                      </div>
+                      <div className="flex items-center justify-between border-b border-border/50 pb-2">
+                        <span className="text-muted">Team</span>
+                        <span className="max-w-[60%] truncate text-right font-medium">
+                          {myTeam ? `${myTeam.name}${myTeam.tag ? ` [${myTeam.tag}]` : ""}` : "No team"}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between border-b border-border/50 pb-2">
+                        <span className="text-muted">Team role</span>
+                        <span className="font-medium">{myTeam?.myRole ?? "N/A"}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 {generalError ? <p className="mt-3 text-sm text-danger">{generalError}</p> : null}
                 {generalFeedback ? <p className="mt-3 text-sm text-success">{generalFeedback}</p> : null}
-              </div>
+              </article>
               <div className="mt-5 border-t border-border/70 pt-4">
                 <h3 className="text-base font-semibold">Change Password</h3>
                 <form className="mt-3 space-y-3" onSubmit={submitPassword}>
@@ -430,56 +447,21 @@ export default function ProfileClient({ name, username, profileImageUrl: initial
               <p className="mt-1 text-sm text-muted">Each account can only belong to one team at a time.</p>
 
               {myTeam ? (
-                <article className="mt-3 rounded-lg border border-border/70 bg-[#141821] p-3">
+                <article className="mt-3 rounded-lg border border-border/70 bg-[#141821] p-4">
                   <div className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
                     <div className="flex flex-col items-start gap-1">
-                      <div className="h-24 w-24 overflow-hidden rounded-md border border-border/70 bg-[#0f1420]">
-                        {myTeam.logoUrl ? (
-                          <img alt="Team logo" className="h-full w-full object-cover" src={myTeam.logoUrl} />
-                        ) : (
-                          <div className="flex h-full w-full items-center justify-center bg-[#10182a] text-xs font-semibold text-muted">
-                            No logo
+                      {myTeam.myRole === "CAPTAIN" ? (
+                        <label className="group relative h-28 w-28 cursor-pointer overflow-hidden rounded-md border border-border/70 bg-[#0f1420]">
+                          {myTeam.logoUrl ? (
+                            <img alt="Team logo" className="h-full w-full object-cover" src={myTeam.logoUrl} />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center bg-[#10182a] text-xs font-semibold text-muted">
+                              No logo
+                            </div>
+                          )}
+                          <div className="absolute inset-0 flex items-center justify-center bg-black/55 text-xs font-semibold uppercase tracking-[0.12em] text-white opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                            Change
                           </div>
-                        )}
-                      </div>
-                      <h3 className="font-semibold">
-                        {myTeam.name}
-                        {myTeam.tag ? ` [${myTeam.tag}]` : ""}
-                      </h3>
-                      <p className="text-xs leading-tight text-muted">{myTeam.myRole}</p>
-                      <p className="text-xs leading-tight text-muted">Registrations: {myTeam.registrationCount}</p>
-                    </div>
-                    <div className="min-w-0">
-                      <p className="text-xs uppercase tracking-[0.1em] text-muted">Members</p>
-                      <ul className="mt-1 space-y-1 text-sm">
-                        {myTeam.members.map((member) => (
-                          <li key={member.id}>
-                            {member.name}
-                            {member.username ? ` (@${member.username})` : ""}
-                            <span className="text-xs text-muted"> ({member.role})</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  </div>
-                  {myTeam.pendingInvites.length > 0 ? (
-                    <>
-                      <p className="mt-3 text-xs uppercase tracking-[0.1em] text-muted">Pending invites</p>
-                      <p className="mt-1 text-sm text-muted">
-                        {myTeam.pendingInvites.map((invite) => invite.inviteeUsername ?? invite.inviteeName).join(", ")}
-                      </p>
-                    </>
-                  ) : null}
-                  <div className="mt-4 flex flex-wrap items-center gap-2">
-                    {myTeam.myRole === "PLAYER" ? (
-                      <button className="btn" disabled={teamLoading} onClick={() => void leaveTeam()} type="button">
-                        Leave Team
-                      </button>
-                    ) : null}
-                    {myTeam.myRole === "CAPTAIN" ? (
-                      <div className="ml-auto flex flex-wrap items-center gap-2">
-                        <label className="btn cursor-pointer">
-                          Upload Team Logo
                           <input
                             accept="image/png,image/jpeg,image/webp"
                             className="hidden"
@@ -494,10 +476,64 @@ export default function ProfileClient({ name, username, profileImageUrl: initial
                             type="file"
                           />
                         </label>
-                        <button className="btn" disabled={teamLoading} onClick={() => void disbandTeam()} type="button">
-                          Disband Team
-                        </button>
+                      ) : (
+                        <div className="h-28 w-28 overflow-hidden rounded-md border border-border/70 bg-[#0f1420]">
+                          {myTeam.logoUrl ? (
+                            <img alt="Team logo" className="h-full w-full object-cover" src={myTeam.logoUrl} />
+                          ) : (
+                            <div className="flex h-full w-full items-center justify-center bg-[#10182a] text-xs font-semibold text-muted">
+                              No logo
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    <div className="min-w-0 rounded-lg border border-border/60 bg-[#111827] p-3">
+                      <p className="text-xs uppercase tracking-[0.1em] text-muted">Team</p>
+                      <div className="mt-2 space-y-2 text-sm">
+                        <div className="flex items-center justify-between border-b border-border/50 pb-2">
+                          <span className="text-muted">Name</span>
+                          <span className="max-w-[60%] truncate text-right font-medium">
+                            {myTeam.name}
+                            {myTeam.tag ? ` [${myTeam.tag}]` : ""}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between border-b border-border/50 pb-2">
+                          <span className="text-muted">Your role</span>
+                          <span className="font-medium">{myTeam.myRole}</span>
+                        </div>
+                        <div className="flex items-center justify-between border-b border-border/50 pb-2">
+                          <span className="text-muted">Registrations</span>
+                          <span className="font-medium">{myTeam.registrationCount}</span>
+                        </div>
                       </div>
+                      <p className="mt-3 text-xs uppercase tracking-[0.1em] text-muted">Members</p>
+                      <ul className="mt-1 space-y-1 text-sm">
+                        {myTeam.members.map((member) => (
+                          <li key={member.id}>
+                            {member.username ? (
+                              <Link className="transition-colors hover:text-[#6ed6ff]" href={`/players/${member.username}`}>
+                                {member.name} (@{member.username})
+                              </Link>
+                            ) : (
+                              member.name
+                            )}
+                            <span className="text-xs text-muted"> ({member.role})</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    {myTeam.myRole === "PLAYER" ? (
+                      <button className="btn" disabled={teamLoading} onClick={() => void leaveTeam()} type="button">
+                        Leave Team
+                      </button>
+                    ) : null}
+                    {myTeam.myRole === "CAPTAIN" ? (
+                      <button className="btn ml-auto" disabled={teamLoading} onClick={() => void disbandTeam()} type="button">
+                        Disband Team
+                      </button>
                     ) : null}
                   </div>
                 </article>

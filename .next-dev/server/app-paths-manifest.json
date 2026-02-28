@@ -1,10 +1,13 @@
 {
-  "/profile/page": "app/profile/page.js",
-  "/page": "app/page.js",
   "/admin/page": "app/admin/page.js",
+  "/page": "app/page.js",
   "/tournaments/[id]/page": "app/tournaments/[id]/page.js",
+  "/players/[username]/page": "app/players/[username]/page.js",
   "/api/teams/route": "app/api/teams/route.js",
   "/api/team-invitations/route": "app/api/team-invitations/route.js",
-  "/api/teams/[id]/invite/route": "app/api/teams/[id]/invite/route.js",
-  "/api/team-invitations/[id]/respond/route": "app/api/team-invitations/[id]/respond/route.js"
+  "/api/games/route": "app/api/games/route.js",
+  "/api/tournaments/route": "app/api/tournaments/route.js",
+  "/profile/page": "app/profile/page.js",
+  "/api/tournaments/[id]/route": "app/api/tournaments/[id]/route.js",
+  "/api/reports/dashboard/route": "app/api/reports/dashboard/route.js"
 }

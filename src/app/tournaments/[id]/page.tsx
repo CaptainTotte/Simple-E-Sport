@@ -116,6 +116,7 @@ export default async function TournamentPage({ params }: PageProps) {
     members: registration.team.members.map((member) => ({
       id: member.id,
       name: member.user?.name ?? member.displayName ?? "Unnamed",
+      username: member.user?.username ?? null,
       role: member.role
     }))
   }));

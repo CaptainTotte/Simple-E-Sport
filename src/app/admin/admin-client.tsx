@@ -94,7 +94,7 @@ type TeamRecord = {
   }>;
 };
 
-type AdminView = "create" | "teams" | "bracket" | "tournaments";
+type AdminView = "create" | "teams" | "bracket" | "tournaments" | "advanced";
 
 async function callApi<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -278,35 +278,12 @@ export default function AdminClientPage() {
     { id: "create", label: "Create Tournament", helper: "Create with game, mode and pool" },
     { id: "teams", label: "Teams", helper: "Create and manage teams" },
     { id: "bracket", label: "Reports", helper: "Submit and review reports" },
-    { id: "tournaments", label: "Tournaments", helper: "View and delete events" }
+    { id: "tournaments", label: "Tournaments", helper: "View and delete events" },
+    { id: "advanced", label: "Advanced", helper: "Maintenance tools" }
   ];
 
   return (
     <main className="container py-8">
-      <header className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-muted">Admin Console</p>
-          <h1 className="text-2xl font-semibold">Tournament Operations</h1>
-        </div>
-        <div className="flex gap-2">
-          <Link className="btn" href="/">
-            Home
-          </Link>
-          <button
-            className="btn"
-            onClick={() =>
-              runAction(async () => {
-                await callApi("/api/seed-games", { method: "POST" });
-                setFeedback("Game catalog reseeded.");
-              })
-            }
-            type="button"
-          >
-            Seed Games
-          </button>
-        </div>
-      </header>
-
       {feedback ? <p className="mb-4 rounded-lg border border-border bg-surface px-3 py-2 text-sm">{feedback}</p> : null}
 
       <section className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
@@ -523,7 +500,18 @@ export default function AdminClientPage() {
                           <td className="py-2">{team.isDummy ? "Dummy" : "Account team"}</td>
                           <td className="py-2">
                             <p className="truncate" title={team.members.map((member) => member.name).join(", ")}>
-                              {team.members.map((member) => member.name).join(", ")}
+                              {team.members.map((member, index) => (
+                                <span key={member.id}>
+                                  {index > 0 ? ", " : ""}
+                                  {member.username ? (
+                                    <Link className="transition-colors hover:text-[#6ed6ff]" href={`/players/${member.username}`}>
+                                      {member.name}
+                                    </Link>
+                                  ) : (
+                                    member.name
+                                  )}
+                                </span>
+                              ))}
                             </p>
                           </td>
                           <td className="py-2">{team.pendingInvites.length}</td>
@@ -836,6 +824,28 @@ export default function AdminClientPage() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </section>
+          ) : null}
+
+          {activeView === "advanced" ? (
+            <section className="panel">
+              <h2 className="text-lg font-semibold">Advanced</h2>
+              <p className="mt-1 text-sm text-muted">Maintenance tools for catalog and system setup.</p>
+              <div className="mt-3">
+                <button
+                  className="btn"
+                  disabled={loading}
+                  onClick={() =>
+                    runAction(async () => {
+                      await callApi("/api/seed-games", { method: "POST" });
+                      setFeedback("Game catalog reseeded.");
+                    })
+                  }
+                  type="button"
+                >
+                  Seed Games
+                </button>
               </div>
             </section>
           ) : null}

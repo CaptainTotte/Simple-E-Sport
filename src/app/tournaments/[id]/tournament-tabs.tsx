@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
 type MatchItem = {
@@ -23,6 +24,7 @@ type TeamItem = {
   members: Array<{
     id: string;
     name: string;
+    username: string | null;
     role: string;
   }>;
 };
@@ -285,7 +287,14 @@ export default function TournamentTabs({ matches, ruleset, teams }: TournamentTa
                 <ul className="mt-2 space-y-1 text-sm">
                   {team.members.map((member) => (
                     <li key={member.id}>
-                      {member.name} <span className="text-xs text-muted">({member.role})</span>
+                      {member.username ? (
+                        <Link className="transition-colors hover:text-[#6ed6ff]" href={`/players/${member.username}`}>
+                          {member.name}
+                        </Link>
+                      ) : (
+                        member.name
+                      )}{" "}
+                      <span className="text-xs text-muted">({member.role})</span>
                     </li>
                   ))}
                 </ul>
