@@ -9,5 +9,5 @@ export default async function ProfilePage() {
     redirect("/login?next=/profile");
   }
 
-  return <ProfileClient name={user.name} username={user.username ?? ""} />;
+  return <ProfileClient name={user.name} username={user.username ?? ""} profileImageUrl={user.profileImageUrl} />;
 }

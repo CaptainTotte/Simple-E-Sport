@@ -99,6 +99,7 @@ export default async function TournamentPage({ params }: PageProps) {
         modeLabel: tournament.ruleset.mode.label,
         teamSize: tournament.ruleset.mode.teamSize,
         teamLimit: tournament.teamLimit,
+        rulesText: tournament.description,
         poolStrategy: tournament.ruleset.poolStrategy,
         randomPoolSize: tournament.ruleset.randomPoolSize,
         poolLabels: tournament.ruleset.poolItems
@@ -114,7 +115,7 @@ export default async function TournamentPage({ params }: PageProps) {
     status: registration.status,
     members: registration.team.members.map((member) => ({
       id: member.id,
-      name: member.user.name,
+      name: member.user?.name ?? member.displayName ?? "Unnamed",
       role: member.role
     }))
   }));

@@ -4,6 +4,9 @@
 # next
 /.next
 /out
+.next-dev
+.next-prod
+/public/uploads
 
 # production
 /build

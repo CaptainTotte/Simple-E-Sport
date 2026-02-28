@@ -35,20 +35,54 @@ export const updateRulesetSchema = z
 
 export const registerTeamSchema = z
   .object({
-    teamId: z.string().optional(),
-    teamName: z.string().min(2).max(80).optional(),
-    teamTag: z.string().max(8).optional(),
-    playerNames: z.array(z.string().min(2).max(64)).min(1)
+    teamId: z.string().min(1)
+  });
+
+export const createTeamSchema = z
+  .object({
+    name: z.string().min(2).max(80),
+    tag: z.string().max(8).optional(),
+    isDummy: z.boolean().optional().default(false),
+    dummyPlayerNames: z.array(z.string().min(2).max(64)).optional(),
+    inviteUsernames: z
+      .array(
+        z
+          .string()
+          .min(3)
+          .max(24)
+          .regex(/^[a-zA-Z0-9_-]+$/, "Username can only include letters, numbers, _ and -")
+      )
+      .optional()
   })
   .superRefine((value, ctx) => {
-    if (!value.teamId && !value.teamName) {
+    if (value.isDummy && (!value.dummyPlayerNames || value.dummyPlayerNames.length === 0)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        path: ["teamName"],
-        message: "teamName is required when teamId is not provided."
+        path: ["dummyPlayerNames"],
+        message: "Dummy teams require at least one player name."
+      });
+    }
+
+    if (!value.isDummy && value.dummyPlayerNames && value.dummyPlayerNames.length > 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["dummyPlayerNames"],
+        message: "dummyPlayerNames can only be used for dummy teams."
       });
     }
   });
+
+export const inviteUserSchema = z.object({
+  username: z
+    .string()
+    .min(3)
+    .max(24)
+    .regex(/^[a-zA-Z0-9_-]+$/, "Username can only include letters, numbers, _ and -")
+});
+
+export const respondTeamInvitationSchema = z.object({
+  accept: z.boolean()
+});
 
 export const reportMatchSchema = z.object({
   winnerTeamId: z.string().min(1),

@@ -1,4 +1,4 @@
-import { GlobalRole, RegistrationStatus, TeamMemberRole, TournamentStatus } from "@prisma/client";
+import { RegistrationStatus, TournamentStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { requireActor } from "@/lib/auth";
 import { writeAuditLog } from "@/lib/audit";
@@ -43,73 +43,25 @@ export async function POST(req: Request, ctx: RouteContext) {
     }
 
     const expectedTeamSize = tournament.ruleset.mode.teamSize;
-    let teamId = body.teamId;
-
-    if (teamId) {
-      const existingTeam = await prisma.team.findUnique({
-        where: { id: teamId },
-        include: {
-          members: true
-        }
-      });
-
-      if (!existingTeam) {
-        return NextResponse.json({ error: "Team not found." }, { status: 404 });
+    const teamId = body.teamId;
+    const team = await prisma.team.findUnique({
+      where: { id: teamId },
+      include: {
+        members: true
       }
+    });
 
-      await requireTeamCaptainOrAdmin(prisma, actor, teamId);
-      if (existingTeam.members.length !== expectedTeamSize) {
-        return NextResponse.json(
-          { error: `Team roster size must be exactly ${expectedTeamSize} for selected mode.` },
-          { status: 400 }
-        );
-      }
-    } else {
-      if (body.playerNames.length !== expectedTeamSize) {
-        return NextResponse.json(
-          {
-            error: `Team roster size must be exactly ${expectedTeamSize} for selected mode.`
-          },
-          { status: 400 }
-        );
-      }
+    if (!team) {
+      return NextResponse.json({ error: "Team not found." }, { status: 404 });
+    }
 
-      if (!body.teamName) {
-        return NextResponse.json({ error: "teamName is required when teamId is not provided." }, { status: 400 });
-      }
+    await requireTeamCaptainOrAdmin(prisma, actor, teamId);
 
-      const created = await prisma.$transaction(async (tx) => {
-        const team = await tx.team.create({
-          data: {
-            name: body.teamName!,
-            tag: body.teamTag,
-            createdById: actor.id
-          }
-        });
-
-        const players = [];
-        for (const playerName of body.playerNames) {
-          const player = await tx.user.create({
-            data: {
-              name: playerName,
-              globalRole: GlobalRole.PLAYER
-            }
-          });
-          players.push(player);
-        }
-
-        await tx.teamMember.createMany({
-          data: players.map((player, index) => ({
-            teamId: team.id,
-            userId: player.id,
-            role: index === 0 ? TeamMemberRole.CAPTAIN : TeamMemberRole.PLAYER
-          }))
-        });
-
-        return team;
-      });
-
-      teamId = created.id;
+    if (team.members.length !== expectedTeamSize) {
+      return NextResponse.json(
+        { error: `Team roster size must be exactly ${expectedTeamSize} for selected mode.` },
+        { status: 400 }
+      );
     }
 
     const registration = await prisma.$transaction(async (tx) => {
@@ -127,7 +79,7 @@ export async function POST(req: Request, ctx: RouteContext) {
       const created = await tx.tournamentRegistration.create({
         data: {
           tournamentId,
-          teamId: teamId!,
+          teamId,
           status: RegistrationStatus.APPROVED,
           approvedAt: new Date(),
           createdById: actor.id
@@ -141,7 +93,7 @@ export async function POST(req: Request, ctx: RouteContext) {
         entityId: created.id,
         tournamentId,
         metadata: {
-          teamId: teamId!,
+          teamId,
           registrationStatus: created.status,
           teamSlots: tournament.teamLimit
         }

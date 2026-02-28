@@ -14,12 +14,7 @@ export const metadata: Metadata = {
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const user = await getCurrentUser(prisma);
   const isAdmin = user?.globalRole === "PLATFORM_ADMIN" || user?.globalRole === "TOURNAMENT_ADMIN";
-  const roleLabel = user?.globalRole
-    ? user.globalRole
-        .toLowerCase()
-        .replaceAll("_", " ")
-        .replace(/\b\w/g, (match) => match.toUpperCase())
-    : "";
+  const profileTag = user?.username ? `@${user.username}` : "No tag";
 
   return (
     <html lang="en">
@@ -33,7 +28,12 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               {user ? (
                 <>
                   <ReportMenu />
-                  <UserMenu isAdmin={Boolean(isAdmin)} roleLabel={roleLabel} username={user.username ?? user.name} />
+                  <UserMenu
+                    displayName={user.name}
+                    isAdmin={Boolean(isAdmin)}
+                    profileImageUrl={user.profileImageUrl}
+                    profileTag={profileTag}
+                  />
                 </>
               ) : (
                 <>

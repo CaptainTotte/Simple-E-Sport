@@ -63,7 +63,7 @@ export function ReportMenu() {
   const [proofUrl, setProofUrl] = useState("");
 
   const [reviewReportId, setReviewReportId] = useState("");
-  const [approveReport, setApproveReport] = useState(true);
+  const [reviewDecision, setReviewDecision] = useState<"" | "approve" | "reject">("");
   const [decisionNote, setDecisionNote] = useState("");
 
   const tournaments = dashboard?.tournaments ?? [];
@@ -113,13 +113,17 @@ export function ReportMenu() {
   async function loadDashboard() {
     const data = await callApi<DashboardData>("/api/reports/dashboard");
     setDashboard(data);
-    setTournamentId((current) => current || data.tournaments[0]?.id || "");
   }
 
   useEffect(() => {
     if (!open) {
       return;
     }
+    setTournamentId("");
+    setMatchId("");
+    setWinnerTeamId("");
+    setReviewReportId("");
+    setReviewDecision("");
     void loadDashboard().catch((error) => setFeedback(error.message));
   }, [open]);
 
@@ -129,7 +133,7 @@ export function ReportMenu() {
       return;
     }
     if (!selectedTournament.matches.find((match) => match.id === matchId)) {
-      setMatchId(reportableMatches[0]?.id ?? "");
+      setMatchId("");
     }
   }, [selectedTournament, matchId, reportableMatches]);
 
@@ -141,12 +145,13 @@ export function ReportMenu() {
     const allowedIds = [selectedMatch.participantATeam?.id, selectedMatch.participantBTeam?.id].filter(
       (teamId): teamId is string => Boolean(teamId)
     );
-    setWinnerTeamId((current) => (allowedIds.includes(current) ? current : allowedIds[0] ?? ""));
+    setWinnerTeamId((current) => (allowedIds.includes(current) ? current : ""));
   }, [selectedMatch]);
 
   useEffect(() => {
     if (!pendingReports.find((report) => report.id === reviewReportId)) {
-      setReviewReportId(pendingReports[0]?.id ?? "");
+      setReviewReportId("");
+      setReviewDecision("");
     }
   }, [pendingReports, reviewReportId]);
 
@@ -189,17 +194,17 @@ export function ReportMenu() {
   return (
     <div className="relative" ref={rootRef}>
       <button className="btn" onClick={() => setOpen((value) => !value)} type="button">
-        Report
+        Report Results
       </button>
 
       {open ? (
         <div className="absolute right-0 z-[120] mt-2 w-[440px] max-w-[92vw] rounded-md border border-border bg-[#0f1728] p-3 shadow-panel">
-          <p className="text-sm font-semibold">Report Result</p>
+          <p className="text-sm font-semibold">Report Results</p>
           {feedback ? <p className="mt-2 rounded border border-border px-2 py-1 text-xs text-muted">{feedback}</p> : null}
 
           <div className="mt-2 grid gap-2">
             <select className="input" onChange={(event) => setTournamentId(event.target.value)} value={tournamentId}>
-              <option value="">Select tournament</option>
+              <option value="">Select</option>
               {tournaments.map((tournament) => (
                 <option key={tournament.id} value={tournament.id}>
                   {tournament.name}
@@ -208,7 +213,7 @@ export function ReportMenu() {
             </select>
 
             <select className="input" onChange={(event) => setMatchId(event.target.value)} value={matchId}>
-              <option value="">Select ready match</option>
+              <option value="">Select</option>
               {reportableMatches.map((match) => (
                 <option key={match.id} value={match.id}>
                   R{match.round} M{match.position}: {match.participantATeam?.name ?? "TBD"} vs{" "}
@@ -218,7 +223,7 @@ export function ReportMenu() {
             </select>
 
             <select className="input" onChange={(event) => setWinnerTeamId(event.target.value)} value={winnerTeamId}>
-              <option value="">Select winner</option>
+              <option value="">Select</option>
               {selectedMatch?.participantATeam ? (
                 <option value={selectedMatch.participantATeam.id}>{selectedMatch.participantATeam.name}</option>
               ) : null}
@@ -288,7 +293,7 @@ export function ReportMenu() {
               <p className="mb-2 text-sm font-semibold">Review Pending</p>
               <div className="grid gap-2">
                 <select className="input" onChange={(event) => setReviewReportId(event.target.value)} value={reviewReportId}>
-                  <option value="">Select pending report</option>
+                  <option value="">Select</option>
                   {pendingReports.map((report) => (
                     <option key={report.id} value={report.id}>
                       {report.tournamentName} - R{report.matchRound} M{report.matchPosition}: {report.matchLabel}
@@ -297,9 +302,10 @@ export function ReportMenu() {
                 </select>
                 <select
                   className="input"
-                  onChange={(event) => setApproveReport(event.target.value === "approve")}
-                  value={approveReport ? "approve" : "reject"}
+                  onChange={(event) => setReviewDecision(event.target.value as "" | "approve" | "reject")}
+                  value={reviewDecision}
                 >
+                  <option value="">Select</option>
                   <option value="approve">Approve</option>
                   <option value="reject">Reject</option>
                 </select>
@@ -311,17 +317,17 @@ export function ReportMenu() {
                 />
                 <button
                   className="btn"
-                  disabled={loading || !reviewReportId}
+                  disabled={loading || !reviewReportId || !reviewDecision}
                   onClick={() =>
                     runAction(async () => {
                       await callApi(`/api/reports/${reviewReportId}/approve`, {
                         method: "POST",
                         body: JSON.stringify({
-                          approve: approveReport,
+                          approve: reviewDecision === "approve",
                           decisionNote
                         })
                       });
-                      setFeedback(`Report ${approveReport ? "approved" : "rejected"}.`);
+                      setFeedback(`Report ${reviewDecision === "approve" ? "approved" : "rejected"}.`);
                     })
                   }
                   type="button"

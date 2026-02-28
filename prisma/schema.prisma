@@ -19,6 +19,13 @@ enum TeamMemberRole {
   PLAYER
 }
 
+enum TeamInvitationStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  CANCELED
+}
+
 enum TournamentStatus {
   DRAFT
   REGISTRATION_OPEN
@@ -72,21 +79,24 @@ enum ParticipantSlot {
 }
 
 model User {
-  id               String                     @id @default(cuid())
-  username         String?                    @unique
-  email            String?                    @unique
-  passwordHash     String?
-  name             String
-  globalRole       GlobalRole                 @default(PLAYER)
-  createdAt        DateTime                   @default(now())
-  updatedAt        DateTime                   @updatedAt
-  memberships      TeamMember[]
-  tournamentRoles  TournamentRoleAssignment[]
-  createdTeams     Team[]                     @relation("TeamCreator")
-  submittedReports MatchReport[]              @relation("SubmittedReports")
-  reviewedReports  MatchReport[]              @relation("ReviewedReports")
-  auditLogs        AuditLog[]
-  createdBrackets  Bracket[]                  @relation("BracketCreator")
+  id                    String                     @id @default(cuid())
+  username              String?                    @unique
+  email                 String?                    @unique
+  passwordHash          String?
+  name                  String
+  profileImageUrl       String?
+  globalRole            GlobalRole                 @default(PLAYER)
+  createdAt             DateTime                   @default(now())
+  updatedAt             DateTime                   @updatedAt
+  memberships           TeamMember[]
+  tournamentRoles       TournamentRoleAssignment[]
+  createdTeams          Team[]                     @relation("TeamCreator")
+  sentTeamInvitations   TeamInvitation[]           @relation("TeamInviter")
+  receivedTeamInvitations TeamInvitation[]         @relation("TeamInvitee")
+  submittedReports      MatchReport[]              @relation("SubmittedReports")
+  reviewedReports       MatchReport[]              @relation("ReviewedReports")
+  auditLogs             AuditLog[]
+  createdBrackets       Bracket[]                  @relation("BracketCreator")
   createdTournaments Tournament[]             @relation("TournamentCreator")
 }
 
@@ -94,11 +104,14 @@ model Team {
   id                String                 @id @default(cuid())
   name              String
   tag               String?
+  logoUrl           String?
+  isDummy           Boolean                @default(false)
   createdById       String?
   createdBy         User?                  @relation("TeamCreator", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
   members           TeamMember[]
+  invitations       TeamInvitation[]
   registrations     TournamentRegistration[]
   matchesAsA        Match[]                @relation("MatchParticipantA")
   matchesAsB        Match[]                @relation("MatchParticipantB")
@@ -110,13 +123,31 @@ model Team {
 model TeamMember {
   id        String         @id @default(cuid())
   teamId    String
-  userId    String
+  userId    String?
+  displayName String?
   role      TeamMemberRole @default(PLAYER)
   createdAt DateTime       @default(now())
   team      Team           @relation(fields: [teamId], references: [id], onDelete: Cascade)
-  user      User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@unique([teamId, userId])
+}
+
+model TeamInvitation {
+  id            String               @id @default(cuid())
+  teamId        String
+  inviterUserId String
+  inviteeUserId String
+  status        TeamInvitationStatus @default(PENDING)
+  respondedAt   DateTime?
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+  team          Team                 @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  inviter       User                 @relation("TeamInviter", fields: [inviterUserId], references: [id], onDelete: Cascade)
+  invitee       User                 @relation("TeamInvitee", fields: [inviteeUserId], references: [id], onDelete: Cascade)
+
+  @@index([inviteeUserId, status])
+  @@index([teamId, status])
 }
 
 model Tournament {

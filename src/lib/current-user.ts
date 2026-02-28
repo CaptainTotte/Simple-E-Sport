@@ -18,6 +18,7 @@ export async function getCurrentUser(prisma: PrismaClient) {
       id: true,
       name: true,
       username: true,
+      profileImageUrl: true,
       globalRole: true
     }
   });

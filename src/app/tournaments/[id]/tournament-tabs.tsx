@@ -32,6 +32,7 @@ type RulesetData = {
   modeLabel: string;
   teamSize: number;
   teamLimit: number;
+  rulesText: string | null;
   poolStrategy: string;
   randomPoolSize: number | null;
   poolLabels: string[];
@@ -50,12 +51,36 @@ function teamLabel(name: string | null | undefined) {
 const BRACKET_CARD_HEIGHT_DEFAULT = 84;
 const BRACKET_STEP_DEFAULT = 112;
 const BRACKET_COLUMN_WIDTH = 280;
-const BRACKET_CONNECTOR_WIDTH = 84;
+const BRACKET_COLUMN_GAP = 120;
+const BRACKET_CONNECTOR_WIDTH = BRACKET_COLUMN_GAP;
 
-function winnerClass(match: MatchItem, teamName: string) {
-  return match.winnerTeamName === teamName
-    ? "bg-[linear-gradient(90deg,rgba(76,201,240,0.18),rgba(76,201,240,0.04))] text-white"
-    : "text-[#d8deef]";
+type TeamOutcome = "W" | "L" | "-";
+
+function outcomeForTeam(match: MatchItem, teamName: string): TeamOutcome {
+  if (!match.winnerTeamName || teamName === "TBD") {
+    return "-";
+  }
+  return match.winnerTeamName === teamName ? "W" : "L";
+}
+
+function participantRowClass(outcome: TeamOutcome) {
+  if (outcome === "W") {
+    return "bg-[linear-gradient(90deg,rgba(34,197,94,0.2),rgba(34,197,94,0.05))] text-white";
+  }
+  if (outcome === "L") {
+    return "bg-[linear-gradient(90deg,rgba(239,68,68,0.18),rgba(239,68,68,0.04))] text-white";
+  }
+  return "text-[#d8deef]";
+}
+
+function stripClass(outcome: TeamOutcome) {
+  if (outcome === "W") {
+    return "bg-[#22c55e]";
+  }
+  if (outcome === "L") {
+    return "bg-[#ef4444]";
+  }
+  return "bg-[#44d9ff]";
 }
 
 export default function TournamentTabs({ matches, ruleset, teams }: TournamentTabsProps) {
@@ -105,7 +130,7 @@ export default function TournamentTabs({ matches, ruleset, teams }: TournamentTa
                 return (
                   <div className="min-w-max px-1">
                     <div className="relative" style={{ height: bracketHeight }}>
-                      <div className="flex gap-[120px]">
+                      <div className="flex" style={{ gap: BRACKET_COLUMN_GAP }}>
                         {rounds.map(([round, roundMatches], roundIndex) => {
                           const offset = ((Math.pow(2, roundIndex) - 1) * step) / 2;
                           const spacing = step * Math.pow(2, roundIndex);
@@ -120,6 +145,8 @@ export default function TournamentTabs({ matches, ruleset, teams }: TournamentTa
                                 const top = offset + matchIndex * spacing;
                                 const teamA = teamLabel(match.participantATeamName);
                                 const teamB = teamLabel(match.participantBTeamName);
+                                const outcomeA = outcomeForTeam(match, teamA);
+                                const outcomeB = outcomeForTeam(match, teamB);
 
                                 return (
                                   <article
@@ -127,18 +154,23 @@ export default function TournamentTabs({ matches, ruleset, teams }: TournamentTa
                                     key={match.id}
                                     style={{ top, height: cardHeight, width: BRACKET_COLUMN_WIDTH }}
                                   >
-                                    <div className="absolute right-0 top-0 h-full w-2 bg-[#44d9ff]" />
+                                    <div
+                                      className={`absolute right-0 top-0 h-1/2 w-2 ${stripClass(outcomeA)}`}
+                                    />
+                                    <div
+                                      className={`absolute right-0 bottom-0 h-1/2 w-2 ${stripClass(outcomeB)}`}
+                                    />
 
-                                    <div className={`flex h-1/2 items-center justify-between border-b border-[#1d2740] px-3 text-sm ${winnerClass(match, teamA)}`}>
+                                    <div className={`flex h-1/2 items-center justify-between border-b border-[#1d2740] px-3 text-sm ${participantRowClass(outcomeA)}`}>
                                       <span className="max-w-[220px] truncate font-semibold">{teamA}</span>
                                       <span className="text-[11px] uppercase tracking-[0.08em] text-[#8ea2c7]">
-                                        {match.winnerTeamName === teamA ? "W" : "-"}
+                                        {outcomeA}
                                       </span>
                                     </div>
-                                    <div className={`flex h-1/2 items-center justify-between px-3 text-sm ${winnerClass(match, teamB)}`}>
+                                    <div className={`flex h-1/2 items-center justify-between px-3 text-sm ${participantRowClass(outcomeB)}`}>
                                       <span className="max-w-[220px] truncate font-semibold">{teamB}</span>
                                       <span className="text-[11px] uppercase tracking-[0.08em] text-[#8ea2c7]">
-                                        {match.winnerTeamName === teamB ? "W" : "-"}
+                                        {outcomeB}
                                       </span>
                                     </div>
                                   </article>
@@ -215,17 +247,25 @@ export default function TournamentTabs({ matches, ruleset, teams }: TournamentTa
           {!ruleset ? (
             <p className="text-sm text-muted">Rules are not configured yet.</p>
           ) : (
-            <div className="rounded-lg border border-border/70 bg-[#0f1728] p-4 text-sm">
-              <p>Game: {ruleset.gameName}</p>
-              <p>Mode: {ruleset.modeLabel}</p>
-              <p>Lagstorlek: {ruleset.teamSize}</p>
-              <p>Turneringsplatser: {ruleset.teamLimit}</p>
-              <p>Pool strategy: {ruleset.poolStrategy}</p>
-              {ruleset.poolStrategy === "RANDOM" ? (
-                <p>Random pool size: {ruleset.randomPoolSize ?? "-"}</p>
-              ) : (
-                <p>Pool: {ruleset.poolLabels.length > 0 ? ruleset.poolLabels.join(", ") : "No manual pool entries"}</p>
-              )}
+            <div className="space-y-3">
+              <div className="rounded-lg border border-border/70 bg-[#141821] p-4 text-sm">
+                <p className="mb-2 text-xs uppercase tracking-[0.12em] text-muted">Regler</p>
+                <p className="whitespace-pre-line text-[#d7deef]">
+                  {ruleset.rulesText?.trim() ? ruleset.rulesText : "Inga specifika regler har lagts till ännu."}
+                </p>
+              </div>
+              <div className="rounded-lg border border-border/70 bg-[#141821] p-4 text-sm">
+                <p>Game: {ruleset.gameName}</p>
+                <p>Mode: {ruleset.modeLabel}</p>
+                <p>Lagstorlek: {ruleset.teamSize}</p>
+                <p>Turneringsplatser: {ruleset.teamLimit}</p>
+                <p>Pool strategy: {ruleset.poolStrategy}</p>
+                {ruleset.poolStrategy === "RANDOM" ? (
+                  <p>Random pool size: {ruleset.randomPoolSize ?? "-"}</p>
+                ) : (
+                  <p>Pool: {ruleset.poolLabels.length > 0 ? ruleset.poolLabels.join(", ") : "No manual pool entries"}</p>
+                )}
+              </div>
             </div>
           )}
         </>
@@ -237,7 +277,7 @@ export default function TournamentTabs({ matches, ruleset, teams }: TournamentTa
             <p className="text-sm text-muted">No registered teams yet.</p>
           ) : (
             teams.map((team) => (
-              <article className="rounded-lg border border-border/70 bg-[#0f1728] p-3" key={team.id}>
+              <article className="rounded-lg border border-border/70 bg-[#141821] p-3" key={team.id}>
                 <h3 className="font-semibold">
                   {team.name} {team.tag ? <span className="text-muted">[{team.tag}]</span> : null}
                 </h3>

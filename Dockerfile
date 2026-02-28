@@ -10,4 +10,4 @@ COPY . .
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "npm run db:generate && npm run db:push && npm run db:seed && rm -rf .next .next-dev || true && npm run dev"]
+CMD ["sh", "-c", "npm run db:generate && npm run db:push && npm run db:seed && rm -rf .next .next-dev || true && mkdir -p .next-dev/server && [ -f .next-dev/server/middleware-manifest.json ] || printf '{}' > .next-dev/server/middleware-manifest.json && npm run dev"]

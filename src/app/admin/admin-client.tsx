@@ -72,7 +72,29 @@ type TournamentDetail = {
   } | null;
 };
 
-type AdminView = "create" | "registration" | "bracket" | "tournaments";
+type TeamRecord = {
+  id: string;
+  name: string;
+  tag: string | null;
+  isDummy: boolean;
+  myRole: "CAPTAIN" | "PLAYER" | null;
+  registrationCount: number;
+  members: Array<{
+    id: string;
+    role: "CAPTAIN" | "PLAYER";
+    userId: string | null;
+    name: string;
+    username: string | null;
+  }>;
+  pendingInvites: Array<{
+    id: string;
+    inviteeUserId: string;
+    inviteeName: string;
+    inviteeUsername: string | null;
+  }>;
+};
+
+type AdminView = "create" | "teams" | "bracket" | "tournaments";
 
 async function callApi<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -92,24 +114,25 @@ async function callApi<T>(url: string, init?: RequestInit): Promise<T> {
 export default function AdminClientPage() {
   const [games, setGames] = useState<Game[]>([]);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [teams, setTeams] = useState<TeamRecord[]>([]);
   const [feedback, setFeedback] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [activeView, setActiveView] = useState<AdminView>("create");
 
   const [createName, setCreateName] = useState("");
-  const [createDescription, setCreateDescription] = useState("");
+  const [createRules, setCreateRules] = useState("");
   const [createTeamLimit, setCreateTeamLimit] = useState<4 | 8 | 16>(8);
 
-  const [rulesetTournamentId, setRulesetTournamentId] = useState("");
   const [rulesetGameId, setRulesetGameId] = useState("");
   const [rulesetModeId, setRulesetModeId] = useState("");
   const [poolStrategy, setPoolStrategy] = useState<"RANDOM" | "MANUAL">("RANDOM");
   const [manualContextItemIds, setManualContextItemIds] = useState<string[]>([]);
 
-  const [registrationTournamentId, setRegistrationTournamentId] = useState("");
-  const [teamName, setTeamName] = useState("");
-  const [teamTag, setTeamTag] = useState("");
-  const [playerNames, setPlayerNames] = useState<string[]>(["", "", ""]);
+  const [createTeamName, setCreateTeamName] = useState("");
+  const [createTeamTag, setCreateTeamTag] = useState("");
+  const [createTeamIsDummy, setCreateTeamIsDummy] = useState(false);
+  const [dummyRosterInput, setDummyRosterInput] = useState("");
+  const [registerTeamByTournamentId, setRegisterTeamByTournamentId] = useState<Record<string, string>>({});
 
   const [generateTournamentId, setGenerateTournamentId] = useState("");
   const [reportingData, setReportingData] = useState<TournamentDetail | null>(null);
@@ -124,12 +147,6 @@ export default function AdminClientPage() {
   const [decisionNote, setDecisionNote] = useState("");
 
   const selectedGame = useMemo(() => games.find((game) => game.id === rulesetGameId), [games, rulesetGameId]);
-  const selectedRegistrationTournament = useMemo(
-    () => tournaments.find((tournament) => tournament.id === registrationTournamentId),
-    [tournaments, registrationTournamentId]
-  );
-
-  const expectedTeamSize = selectedRegistrationTournament?.ruleset?.mode.teamSize ?? 3;
   const randomPoolAllowed = selectedGame?.randomPoolAllowed ?? true;
   const selectedReportingMatch = useMemo(
     () => reportingData?.bracket?.matches.find((match) => match.id === reportMatchId) ?? null,
@@ -169,24 +186,19 @@ export default function AdminClientPage() {
   }
 
   async function loadData() {
-    const [gamesData, tournamentsData] = await Promise.all([
+    const [gamesData, tournamentsData, teamsData] = await Promise.all([
       callApi<{ games: Game[] }>("/api/games"),
-      callApi<{ tournaments: Tournament[] }>("/api/tournaments")
+      callApi<{ tournaments: Tournament[] }>("/api/tournaments"),
+      callApi<{ teams: TeamRecord[] }>("/api/teams")
     ]);
 
     setGames(gamesData.games);
     setTournaments(tournamentsData.tournaments);
+    setTeams(teamsData.teams);
 
-    if (!rulesetGameId && gamesData.games.length > 0) {
-      setRulesetGameId(gamesData.games[0].id);
-      setRulesetModeId(gamesData.games[0].modes[0]?.id ?? "");
-    }
-
-    if (!rulesetTournamentId && tournamentsData.tournaments.length > 0) {
+    if (tournamentsData.tournaments.length > 0) {
       const fallbackTournamentId = tournamentsData.tournaments[0].id;
-      setRulesetTournamentId(fallbackTournamentId);
-      setRegistrationTournamentId(fallbackTournamentId);
-      setGenerateTournamentId(fallbackTournamentId);
+      setGenerateTournamentId((current) => current || fallbackTournamentId);
     }
   }
 
@@ -211,13 +223,6 @@ export default function AdminClientPage() {
     }
     setManualContextItemIds((previous) => previous.filter((id) => selectedGame.contextItems.some((item) => item.id === id)));
   }, [selectedGame, rulesetModeId, poolStrategy]);
-
-  useEffect(() => {
-    setPlayerNames((previous) => {
-      const next = Array.from({ length: expectedTeamSize }, (_, index) => previous[index] ?? "");
-      return next;
-    });
-  }, [expectedTeamSize]);
 
   useEffect(() => {
     if (!selectedReportingMatch) {
@@ -262,9 +267,16 @@ export default function AdminClientPage() {
     setManualContextItemIds((current) => (current.includes(id) ? current.filter((value) => value !== id) : [...current, id]));
   }
 
+  function updateRegisterTeamSelection(tournamentId: string, teamId: string) {
+    setRegisterTeamByTournamentId((current) => ({
+      ...current,
+      [tournamentId]: teamId
+    }));
+  }
+
   const menuItems: Array<{ id: AdminView; label: string; helper: string }> = [
-    { id: "create", label: "Create + Game Setup", helper: "Create tournament and set game/mode" },
-    { id: "registration", label: "Team Registration", helper: "Add teams and players" },
+    { id: "create", label: "Create Tournament", helper: "Create with game, mode and pool" },
+    { id: "teams", label: "Teams", helper: "Create and manage teams" },
     { id: "bracket", label: "Reports", helper: "Submit and review reports" },
     { id: "tournaments", label: "Tournaments", helper: "View and delete events" }
   ];
@@ -297,221 +309,260 @@ export default function AdminClientPage() {
 
       {feedback ? <p className="mb-4 rounded-lg border border-border bg-surface px-3 py-2 text-sm">{feedback}</p> : null}
 
-      <section className="grid gap-4 lg:grid-cols-[260px_1fr]">
+      <section className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
         <aside className="panel h-fit lg:sticky lg:top-24">
           <p className="mb-3 text-xs uppercase tracking-[0.16em] text-muted">Menus</p>
           <div className="space-y-2">
             {menuItems.map((item) => (
               <button
-                className={
-                  activeView === item.id
-                    ? "w-full rounded-lg border border-transparent bg-[linear-gradient(120deg,#4cc9f0,#3b82f6)] px-3 py-2 text-left"
-                    : "w-full rounded-lg border border-border bg-[#0f1728] px-3 py-2 text-left hover:border-accent"
-                }
+                className={`admin-menu-item ${activeView === item.id ? "is-active" : ""}`}
                 key={item.id}
                 onClick={() => setActiveView(item.id)}
                 type="button"
               >
-                <p className={activeView === item.id ? "font-semibold text-[#041022]" : "font-semibold"}>{item.label}</p>
-                <p className={activeView === item.id ? "text-xs text-[#0e2840]" : "text-xs text-muted"}>{item.helper}</p>
+                <p className="admin-menu-title">{item.label}</p>
+                <p className="admin-menu-helper">{item.helper}</p>
               </button>
             ))}
           </div>
         </aside>
 
-        <div>
+        <div className="min-w-0">
           {activeView === "create" ? (
-            <article className="panel space-y-5">
-              <section>
-                <h2 className="text-lg font-semibold">Create Tournament</h2>
-                <div className="mt-3 space-y-2">
-                  <input className="input" value={createName} onChange={(event) => setCreateName(event.target.value)} placeholder="Tournament name" />
-                  <textarea
-                    className="input min-h-24"
-                    value={createDescription}
-                    onChange={(event) => setCreateDescription(event.target.value)}
-                    placeholder="Description"
-                  />
-                  <select
-                    className="input"
-                    value={String(createTeamLimit)}
-                    onChange={(event) => setCreateTeamLimit(Number(event.target.value) as 4 | 8 | 16)}
-                  >
-                    <option value="4">4 Teams</option>
-                    <option value="8">8 Teams</option>
-                    <option value="16">16 Teams</option>
-                  </select>
-                </div>
-                <button
-                  className="btn btn-primary mt-3"
-                  disabled={loading}
-                  onClick={() =>
-                    runAction(async () => {
-                      const created = await callApi<{ tournament: { id: string } }>("/api/tournaments", {
-                        method: "POST",
-                        body: JSON.stringify({
-                          name: createName,
-                          description: createDescription,
-                          teamLimit: createTeamLimit
-                        })
-                      });
-                      setRulesetTournamentId(created.tournament.id);
-                      setRegistrationTournamentId(created.tournament.id);
-                      setGenerateTournamentId(created.tournament.id);
-                      setFeedback("Tournament created. Configure game + mode below.");
-                    })
-                  }
-                  type="button"
-                >
-                  Create
-                </button>
-              </section>
-
-              <section className="border-t border-border/70 pt-5">
-                <h3 className="text-base font-semibold">Game + Mode</h3>
-                <div className="mt-3 grid gap-2">
-                  <select className="input" value={rulesetTournamentId} onChange={(event) => setRulesetTournamentId(event.target.value)}>
-                    <option value="">Select tournament</option>
-                    {tournaments.map((tournament) => (
-                      <option key={tournament.id} value={tournament.id}>
-                        {tournament.name}
-                      </option>
-                    ))}
-                  </select>
-
-                  <select className="input" value={rulesetGameId} onChange={(event) => setRulesetGameId(event.target.value)}>
-                    <option value="">Select game</option>
-                    {games.map((game) => (
-                      <option key={game.id} value={game.id}>
-                        {game.name}
-                      </option>
-                    ))}
-                  </select>
-
-                  <select className="input" value={rulesetModeId} onChange={(event) => setRulesetModeId(event.target.value)}>
-                    <option value="">Select mode</option>
-                    {selectedGame?.modes.map((mode) => (
-                      <option key={mode.id} value={mode.id}>
-                        {mode.label}
-                      </option>
-                    ))}
-                  </select>
-
-                  <select className="input" value={poolStrategy} onChange={(event) => setPoolStrategy(event.target.value as "RANDOM" | "MANUAL")}>
-                    {randomPoolAllowed ? <option value="RANDOM">Random pool</option> : null}
-                    <option value="MANUAL">Manual pool</option>
-                  </select>
-
-                  {!randomPoolAllowed ? (
-                    <p className="rounded-lg border border-border/70 bg-[#0f1728] p-3 text-xs text-muted">
-                      This game supports manual pool only.
-                    </p>
-                  ) : null}
-
-                  {poolStrategy === "RANDOM" ? (
-                    <p className="rounded-lg border border-border/70 bg-[#0f1728] p-3 text-xs text-muted">
-                      Random pool size is set automatically based on tournament slots (4/8/16 teams).
-                    </p>
-                  ) : (
-                    <div className="rounded-lg border border-border/70 bg-[#0f1728] p-3">
-                      <p className="mb-2 text-xs uppercase tracking-[0.14em] text-muted">
-                        {selectedGame?.contextLabelPlural ?? "Pool items"}
-                      </p>
-                      <div className="grid gap-2 sm:grid-cols-2">
-                        {selectedGame?.contextItems.map((contextItem) => (
-                          <label className="flex items-center gap-2 text-sm" key={contextItem.id}>
-                            <input
-                              checked={manualContextItemIds.includes(contextItem.id)}
-                              onChange={() => toggleManualPoolItem(contextItem.id)}
-                              type="checkbox"
-                            />
-                            <span>{contextItem.name}</span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-                <button
-                  className="btn btn-primary mt-3"
-                  disabled={loading || !rulesetTournamentId || !rulesetGameId || !rulesetModeId}
-                  onClick={() =>
-                    runAction(async () => {
-                      const poolItems = poolStrategy === "MANUAL" ? manualContextItemIds.map((contextItemId) => ({ contextItemId })) : [];
-                      await callApi(`/api/tournaments/${rulesetTournamentId}/ruleset`, {
-                        method: "POST",
-                        body: JSON.stringify({
-                          gameId: rulesetGameId,
-                          modeId: rulesetModeId,
-                          poolStrategy,
-                          poolItems
-                        })
-                      });
-                      setFeedback("Ruleset saved and registration opened.");
-                    })
-                  }
-                  type="button"
-                >
-                  Save Game + Mode
-                </button>
-              </section>
-            </article>
-          ) : null}
-
-          {activeView === "registration" ? (
             <article className="panel">
-              <h2 className="text-lg font-semibold">Team Registration</h2>
+              <h2 className="text-lg font-semibold">Create Tournament</h2>
               <div className="mt-3 grid gap-2">
-                <select className="input" value={registrationTournamentId} onChange={(event) => setRegistrationTournamentId(event.target.value)}>
-                  <option value="">Select tournament</option>
-                  {tournaments.map((tournament) => (
-                    <option key={tournament.id} value={tournament.id}>
-                      {tournament.name}
+                <input className="input" value={createName} onChange={(event) => setCreateName(event.target.value)} placeholder="Tournament name" />
+                <textarea
+                  className="input min-h-24"
+                  value={createRules}
+                  onChange={(event) => setCreateRules(event.target.value)}
+                  placeholder="Rules (shown in Regler tab)"
+                />
+                <select
+                  className="input"
+                  value={String(createTeamLimit)}
+                  onChange={(event) => setCreateTeamLimit(Number(event.target.value) as 4 | 8 | 16)}
+                >
+                  <option value="4">4 Teams</option>
+                  <option value="8">8 Teams</option>
+                  <option value="16">16 Teams</option>
+                </select>
+
+                <select className="input" value={rulesetGameId} onChange={(event) => setRulesetGameId(event.target.value)}>
+                  <option value="">Select game</option>
+                  {games.map((game) => (
+                    <option key={game.id} value={game.id}>
+                      {game.name}
                     </option>
                   ))}
                 </select>
 
-                <input className="input" value={teamName} onChange={(event) => setTeamName(event.target.value)} placeholder="Team name" />
-                <input className="input" value={teamTag} onChange={(event) => setTeamTag(event.target.value)} placeholder="Tag (optional)" />
+                <select className="input" value={rulesetModeId} onChange={(event) => setRulesetModeId(event.target.value)}>
+                  <option value="">Select mode</option>
+                  {selectedGame?.modes.map((mode) => (
+                    <option key={mode.id} value={mode.id}>
+                      {mode.label}
+                    </option>
+                  ))}
+                </select>
 
-                <p className="text-xs text-muted">Players ({expectedTeamSize})</p>
-                {playerNames.map((value, index) => (
-                  <input
-                    className="input"
-                    key={index}
-                    onChange={(event) =>
-                      setPlayerNames((current) => current.map((name, playerIndex) => (playerIndex === index ? event.target.value : name)))
-                    }
-                    placeholder={`Player ${index + 1}`}
-                    value={value}
-                  />
-                ))}
+                <select className="input" value={poolStrategy} onChange={(event) => setPoolStrategy(event.target.value as "RANDOM" | "MANUAL")}>
+                  {randomPoolAllowed ? <option value="RANDOM">Random pool</option> : null}
+                  <option value="MANUAL">Manual pool</option>
+                </select>
+
+                {!randomPoolAllowed ? (
+                  <p className="rounded-lg border border-border/70 bg-[#141821] p-3 text-xs text-muted">
+                    This game supports manual pool only.
+                  </p>
+                ) : null}
+
+                {poolStrategy === "RANDOM" ? (
+                  <p className="rounded-lg border border-border/70 bg-[#141821] p-3 text-xs text-muted">
+                    Random pool size is set automatically based on tournament slots (4/8/16 teams).
+                  </p>
+                ) : (
+                  <div className="rounded-lg border border-border/70 bg-[#141821] p-3">
+                    <p className="mb-2 text-xs uppercase tracking-[0.14em] text-muted">
+                      {selectedGame?.contextLabelPlural ?? "Pool items"}
+                    </p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {selectedGame?.contextItems.map((contextItem) => (
+                        <label className="flex items-center gap-2 text-sm" key={contextItem.id}>
+                          <input
+                            checked={manualContextItemIds.includes(contextItem.id)}
+                            onChange={() => toggleManualPoolItem(contextItem.id)}
+                            type="checkbox"
+                          />
+                          <span>{contextItem.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
               <button
                 className="btn btn-primary mt-3"
-                disabled={loading || !registrationTournamentId}
+                disabled={loading || !rulesetGameId || !rulesetModeId}
                 onClick={() =>
                   runAction(async () => {
-                    const normalizedPlayerNames = playerNames.map((name) => name.trim()).filter(Boolean);
-                    if (normalizedPlayerNames.length !== expectedTeamSize) {
-                      throw new Error(`Please fill exactly ${expectedTeamSize} player names.`);
-                    }
-
-                    await callApi(`/api/tournaments/${registrationTournamentId}/register`, {
+                    const created = await callApi<{ tournament: { id: string } }>("/api/tournaments", {
                       method: "POST",
                       body: JSON.stringify({
-                        teamName,
-                        teamTag,
-                        playerNames: normalizedPlayerNames
+                        name: createName,
+                        description: createRules,
+                        teamLimit: createTeamLimit
                       })
                     });
-                    setFeedback("Team registered.");
+                    const poolItems = poolStrategy === "MANUAL" ? manualContextItemIds.map((contextItemId) => ({ contextItemId })) : [];
+                    await callApi(`/api/tournaments/${created.tournament.id}/ruleset`, {
+                      method: "POST",
+                      body: JSON.stringify({
+                        gameId: rulesetGameId,
+                        modeId: rulesetModeId,
+                        poolStrategy,
+                        poolItems
+                      })
+                    });
+                    setGenerateTournamentId(created.tournament.id);
+                    setFeedback("Tournament created with game + mode.");
                   })
                 }
                 type="button"
               >
-                Register Team
+                Create Tournament
               </button>
+            </article>
+          ) : null}
+
+          {activeView === "teams" ? (
+            <article className="panel space-y-4">
+              <section>
+                <h2 className="text-lg font-semibold">Teams</h2>
+                <p className="mt-1 text-sm text-muted">
+                  Teams are account-bound. Admins can also create dummy teams without real user accounts.
+                </p>
+                <div className="mt-3 grid gap-2">
+                  <input
+                    className="input"
+                    onChange={(event) => setCreateTeamName(event.target.value)}
+                    placeholder="Team name"
+                    value={createTeamName}
+                  />
+                  <input className="input" onChange={(event) => setCreateTeamTag(event.target.value)} placeholder="Tag (optional)" value={createTeamTag} />
+                  <label className="flex items-center gap-2 text-sm text-muted">
+                    <input checked={createTeamIsDummy} onChange={(event) => setCreateTeamIsDummy(event.target.checked)} type="checkbox" />
+                    Create dummy team
+                  </label>
+                  {createTeamIsDummy ? (
+                    <textarea
+                      className="input min-h-24"
+                      onChange={(event) => setDummyRosterInput(event.target.value)}
+                      placeholder="Dummy players (one per line)"
+                      value={dummyRosterInput}
+                    />
+                  ) : null}
+                </div>
+                <button
+                  className="btn btn-primary mt-3"
+                  disabled={loading || !createTeamName.trim()}
+                  onClick={() =>
+                    runAction(async () => {
+                      await callApi("/api/teams", {
+                        method: "POST",
+                        body: JSON.stringify({
+                          name: createTeamName,
+                          tag: createTeamTag,
+                          isDummy: createTeamIsDummy,
+                          dummyPlayerNames: createTeamIsDummy
+                            ? dummyRosterInput
+                                .split("\n")
+                                .map((value) => value.trim())
+                                .filter(Boolean)
+                            : []
+                        })
+                      });
+
+                      setCreateTeamName("");
+                      setCreateTeamTag("");
+                      setCreateTeamIsDummy(false);
+                      setDummyRosterInput("");
+                      setFeedback("Team created.");
+                    })
+                  }
+                  type="button"
+                >
+                  Create Team
+                </button>
+              </section>
+
+              <section className="border-t border-border/70 pt-4">
+                <h3 className="text-base font-semibold">All Teams</h3>
+                <div className="mt-2 overflow-x-auto">
+                  <table className="w-full min-w-[760px] table-fixed border-collapse text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-border text-muted">
+                        <th className="w-[180px] py-2">Name</th>
+                        <th className="w-[120px] py-2">Type</th>
+                        <th className="py-2">Members</th>
+                        <th className="w-[90px] py-2">Invites</th>
+                        <th className="w-[120px] py-2">Registrations</th>
+                        <th className="w-[90px] py-2 text-right">Delete</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {teams.map((team) => (
+                        <tr className="border-b border-border/60" key={team.id}>
+                          <td className="py-2">
+                            <p className="truncate font-medium" title={team.name}>
+                              {team.name}
+                            </p>
+                            {team.tag ? <p className="text-xs text-muted">[{team.tag}]</p> : null}
+                          </td>
+                          <td className="py-2">{team.isDummy ? "Dummy" : "Account team"}</td>
+                          <td className="py-2">
+                            <p className="truncate" title={team.members.map((member) => member.name).join(", ")}>
+                              {team.members.map((member) => member.name).join(", ")}
+                            </p>
+                          </td>
+                          <td className="py-2">{team.pendingInvites.length}</td>
+                          <td className="py-2">{team.registrationCount}</td>
+                          <td className="py-2 text-right">
+                            <button
+                              aria-label={`Delete ${team.name}`}
+                              className="btn"
+                              disabled={loading}
+                              onClick={() =>
+                                runAction(async () => {
+                                  const confirmed = window.confirm(`Delete team "${team.name}"?`);
+                                  if (!confirmed) {
+                                    return;
+                                  }
+                                  await callApi(`/api/teams/${team.id}`, { method: "DELETE" });
+                                  setFeedback("Team deleted.");
+                                })
+                              }
+                              title={`Delete ${team.name}`}
+                              type="button"
+                            >
+                              <svg fill="none" height="16" viewBox="0 0 24 24" width="16">
+                                <path
+                                  d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-9 0 1 12a1 1 0 0 0 1 .9h8a1 1 0 0 0 1-.9L18 7M10 11v6M14 11v6"
+                                  stroke="currentColor"
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth="1.7"
+                                />
+                              </svg>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
             </article>
           ) : null}
 
@@ -633,7 +684,7 @@ export default function AdminClientPage() {
                   Submit Review
                 </button>
                 {pendingReports.find((report) => report.id === reviewReportId) ? (
-                  <div className="rounded border border-border/60 bg-[#101828] p-2 text-xs text-muted">
+                  <div className="rounded border border-border/60 bg-[#141821] p-2 text-xs text-muted">
                     {(() => {
                       const report = pendingReports.find((item) => item.id === reviewReportId);
                       if (!report) {
@@ -675,6 +726,7 @@ export default function AdminClientPage() {
                       <th className="py-2">Mode</th>
                       <th className="py-2">Teams</th>
                       <th className="py-2">Open</th>
+                      <th className="py-2">Register Team</th>
                       <th className="py-2">Bracket</th>
                       <th className="py-2 text-right">Delete</th>
                     </tr>
@@ -693,6 +745,44 @@ export default function AdminClientPage() {
                           <Link className="btn" href={`/tournaments/${tournament.id}`}>
                             View
                           </Link>
+                        </td>
+                        <td className="py-2">
+                          <div className="flex min-w-[220px] gap-2">
+                            <select
+                              className="input"
+                              onChange={(event) => updateRegisterTeamSelection(tournament.id, event.target.value)}
+                              value={registerTeamByTournamentId[tournament.id] ?? ""}
+                            >
+                              <option value="">Select team</option>
+                              {teams.map((team) => (
+                                <option key={team.id} value={team.id}>
+                                  {team.name}
+                                </option>
+                              ))}
+                            </select>
+                            <button
+                              className="btn"
+                              disabled={loading || !(registerTeamByTournamentId[tournament.id] ?? "")}
+                              onClick={() =>
+                                runAction(async () => {
+                                  const teamId = registerTeamByTournamentId[tournament.id];
+                                  if (!teamId) {
+                                    throw new Error("Select a team first.");
+                                  }
+                                  await callApi(`/api/tournaments/${tournament.id}/register`, {
+                                    method: "POST",
+                                    body: JSON.stringify({
+                                      teamId
+                                    })
+                                  });
+                                  setFeedback("Team registered to tournament.");
+                                })
+                              }
+                              type="button"
+                            >
+                              Register
+                            </button>
+                          </div>
                         </td>
                         <td className="py-2">
                           <button
