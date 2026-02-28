@@ -1,5 +1,6 @@
 import {
   MatchStatus,
+  NotificationType,
   ParticipantSlot,
   RegistrationStatus,
   ReportStatus,
@@ -8,6 +9,10 @@ import {
 } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { writeAuditLog } from "@/lib/audit";
+import {
+  createNotificationsForUsers,
+  markPendingReviewNotificationsResolved
+} from "@/lib/notifications";
 
 type Tx = Prisma.TransactionClient;
 
@@ -354,7 +359,26 @@ export async function reviewMatchReport(input: {
       include: {
         match: {
           include: {
-            bracket: true
+            bracket: {
+              include: {
+                tournament: {
+                  select: {
+                    id: true,
+                    name: true
+                  }
+                }
+              }
+            },
+            participantATeam: {
+              select: {
+                name: true
+              }
+            },
+            participantBTeam: {
+              select: {
+                name: true
+              }
+            }
           }
         }
       }
@@ -398,6 +422,21 @@ export async function reviewMatchReport(input: {
         }
       });
 
+      await markPendingReviewNotificationsResolved(tx, report.id);
+      if (report.submittedById !== input.reviewerUserId) {
+        const matchLabel = `${report.match.participantATeam?.name ?? "TBD"} vs ${report.match.participantBTeam?.name ?? "TBD"}`;
+        await createNotificationsForUsers(tx, [report.submittedById], {
+          type: NotificationType.REPORT_REJECTED,
+          title: "Result denied",
+          body: `${report.match.bracket.tournament.name}: ${matchLabel}`,
+          actionUrl: `/tournaments/${report.match.bracket.tournamentId}`,
+          matchReportId: report.id,
+          metadata: {
+            decisionNote: input.decisionNote ?? null
+          }
+        });
+      }
+
       return { approved: false };
     }
 
@@ -428,6 +467,48 @@ export async function reviewMatchReport(input: {
       metadata: {
         matchId: report.matchId,
         winnerTeamId: report.claimedWinnerTeamId
+      }
+    });
+
+    await markPendingReviewNotificationsResolved(tx, report.id);
+    if (report.submittedById !== input.reviewerUserId) {
+      const matchLabel = `${report.match.participantATeam?.name ?? "TBD"} vs ${report.match.participantBTeam?.name ?? "TBD"}`;
+      await createNotificationsForUsers(tx, [report.submittedById], {
+        type: NotificationType.REPORT_APPROVED,
+        title: "Result approved",
+        body: `${report.match.bracket.tournament.name}: ${matchLabel}`,
+        actionUrl: `/tournaments/${report.match.bracket.tournamentId}`,
+        matchReportId: report.id
+      });
+    }
+
+    const winnerMemberUserIds = (
+      await tx.teamMember.findMany({
+        where: {
+          teamId: report.claimedWinnerTeamId,
+          userId: {
+            not: null
+          }
+        },
+        select: {
+          userId: true
+        }
+      })
+    )
+      .map((item) => item.userId)
+      .filter((userId): userId is string => Boolean(userId));
+
+    await createNotificationsForUsers(tx, winnerMemberUserIds, {
+      type: NotificationType.TOURNAMENT_ADVANCEMENT,
+      title: report.match.nextMatchId ? "Grattis! Ni är vidare" : "Grattis! Ni vann turneringen",
+      body: report.match.nextMatchId
+        ? `Teamet gick vidare i ${report.match.bracket.tournament.name}.`
+        : `Teamet vann ${report.match.bracket.tournament.name}.`,
+      actionUrl: `/tournaments/${report.match.bracket.tournamentId}`,
+      matchReportId: report.id,
+      metadata: {
+        tournamentId: report.match.bracket.tournamentId,
+        matchId: report.matchId
       }
     });
 

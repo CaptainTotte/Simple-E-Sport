@@ -1,5 +1,7 @@
 node_modules
 .next
+.next-dev
+.next-prod
 npm-debug.log
 Dockerfile*
 docker-compose*

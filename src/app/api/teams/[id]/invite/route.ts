@@ -1,8 +1,9 @@
-import { TeamInvitationStatus } from "@prisma/client";
+import { NotificationType, TeamInvitationStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { requireActor } from "@/lib/auth";
 import { writeAuditLog } from "@/lib/audit";
 import { errorResponse, parseJson } from "@/lib/http";
+import { createNotificationsForUsers } from "@/lib/notifications";
 import { requireTeamCaptainOrAdmin } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { inviteUserSchema } from "@/lib/validation";
@@ -25,6 +26,7 @@ export async function POST(req: Request, ctx: RouteContext) {
       select: {
         id: true,
         name: true,
+        tag: true,
         isDummy: true
       }
     });
@@ -131,6 +133,17 @@ export async function POST(req: Request, ctx: RouteContext) {
           teamId,
           inviteeUserId: invitee.id,
           inviteeUsername: invitee.username
+        }
+      });
+
+      await createNotificationsForUsers(tx, [invitee.id], {
+        type: NotificationType.TEAM_INVITE,
+        title: "Team invitation",
+        body: `${actor.name} invited you to ${team.name}${team.tag ? ` [${team.tag}]` : ""}.`,
+        actionUrl: "/profile",
+        teamInvitationId: created.id,
+        metadata: {
+          teamId: team.id
         }
       });
 

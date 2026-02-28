@@ -1,8 +1,10 @@
-import { GlobalRole, MatchStatus, ReportStatus } from "@prisma/client";
+import { GlobalRole, MatchStatus, NotificationType, ReportStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { requireActor } from "@/lib/auth";
 import { writeAuditLog } from "@/lib/audit";
+import { finalizeMatchAndAdvance } from "@/lib/bracket";
 import { errorResponse, parseJson } from "@/lib/http";
+import { createNotificationsForUsers, getTournamentAdminRecipientIds } from "@/lib/notifications";
 import { requireTournamentAdmin } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { reportMatchSchema } from "@/lib/validation";
@@ -22,7 +24,26 @@ export async function POST(req: Request, ctx: RouteContext) {
     const match = await prisma.match.findUnique({
       where: { id: matchId },
       include: {
-        bracket: true,
+        bracket: {
+          include: {
+            tournament: {
+              select: {
+                id: true,
+                name: true
+              }
+            }
+          }
+        },
+        participantATeam: {
+          select: {
+            name: true
+          }
+        },
+        participantBTeam: {
+          select: {
+            name: true
+          }
+        },
         reports: {
           where: {
             status: ReportStatus.SUBMITTED
@@ -51,26 +72,31 @@ export async function POST(req: Request, ctx: RouteContext) {
       return NextResponse.json({ error: "A pending report already exists for this match." }, { status: 409 });
     }
 
+    let isAdminActor = actor.role === GlobalRole.PLATFORM_ADMIN || actor.role === GlobalRole.TOURNAMENT_ADMIN;
+    const providedProofs = body.proofs ?? [];
     let submittingTeamId = body.winnerTeamId;
-    if (actor.role !== GlobalRole.PLATFORM_ADMIN) {
-      const membership = await prisma.teamMember.findFirst({
-        where: {
-          userId: actor.id,
-          teamId: {
-            in: participantIds
-          }
+    const membership = await prisma.teamMember.findFirst({
+      where: {
+        userId: actor.id,
+        teamId: {
+          in: participantIds
         }
-      });
-
-      if (!membership) {
-        try {
-          await requireTournamentAdmin(prisma, actor, match.bracket.tournamentId);
-        } catch {
-          return NextResponse.json({ error: "Only match participants or tournament admins can submit reports." }, { status: 403 });
-        }
-      } else {
-        submittingTeamId = membership.teamId;
       }
+    });
+
+    if (membership) {
+      submittingTeamId = membership.teamId;
+    } else {
+      try {
+        await requireTournamentAdmin(prisma, actor, match.bracket.tournamentId);
+        isAdminActor = true;
+      } catch {
+        return NextResponse.json({ error: "Only match participants or tournament admins can submit reports." }, { status: 403 });
+      }
+    }
+
+    if (!isAdminActor && providedProofs.length === 0) {
+      return NextResponse.json({ error: "Proof is required for player submissions." }, { status: 400 });
     }
 
     const report = await prisma.$transaction(async (tx) => {
@@ -83,26 +109,94 @@ export async function POST(req: Request, ctx: RouteContext) {
           scoreA: body.scoreA,
           scoreB: body.scoreB,
           notes: body.notes,
-          proofAssets: {
-            create: body.proofs.map((proof) => ({
-              publicUrl: proof.publicUrl,
-              storageProvider: proof.storageProvider ?? "manual",
-              objectKey: proof.objectKey ?? proof.publicUrl
-            }))
-          }
+          ...(isAdminActor
+            ? {
+                status: ReportStatus.APPROVED,
+                reviewedById: actor.id,
+                reviewedAt: new Date(),
+                decisionNote: "Auto-approved via admin submission."
+              }
+            : {}),
+          ...(providedProofs.length > 0
+            ? {
+                proofAssets: {
+                  create: providedProofs.map((proof) => ({
+                    publicUrl: proof.publicUrl,
+                    storageProvider: proof.storageProvider ?? "manual",
+                    objectKey: proof.objectKey ?? proof.publicUrl
+                  }))
+                }
+              }
+            : {})
         },
         include: {
           proofAssets: true
         }
       });
 
-      await tx.match.update({
-        where: { id: matchId },
-        data: {
-          status: MatchStatus.REPORTED,
-          reportedAt: new Date()
-        }
-      });
+      if (isAdminActor) {
+        await finalizeMatchAndAdvance(tx, {
+          matchId,
+          winnerTeamId: body.winnerTeamId,
+          scoreA: body.scoreA,
+          scoreB: body.scoreB,
+          approvedReportId: created.id
+        });
+
+        const winnerMemberUserIds = (
+          await tx.teamMember.findMany({
+            where: {
+              teamId: body.winnerTeamId,
+              userId: {
+                not: null
+              }
+            },
+            select: {
+              userId: true
+            }
+          })
+        )
+          .map((item) => item.userId)
+          .filter((userId): userId is string => Boolean(userId));
+
+        await createNotificationsForUsers(tx, winnerMemberUserIds, {
+          type: NotificationType.TOURNAMENT_ADVANCEMENT,
+          title: match.nextMatchId ? "Grattis! Ni är vidare" : "Grattis! Ni vann turneringen",
+          body: match.nextMatchId
+            ? `Teamet gick vidare i ${match.bracket.tournament.name}.`
+            : `Teamet vann ${match.bracket.tournament.name}.`,
+          actionUrl: `/tournaments/${match.bracket.tournamentId}`,
+          matchReportId: created.id,
+          metadata: {
+            tournamentId: match.bracket.tournamentId,
+            matchId
+          }
+        });
+      } else {
+        await tx.match.update({
+          where: { id: matchId },
+          data: {
+            status: MatchStatus.REPORTED,
+            reportedAt: new Date()
+          }
+        });
+
+        const adminRecipientIds = (await getTournamentAdminRecipientIds(tx, match.bracket.tournamentId)).filter(
+          (userId) => userId !== actor.id
+        );
+        const matchLabel = `${match.participantATeam?.name ?? "TBD"} vs ${match.participantBTeam?.name ?? "TBD"}`;
+        await createNotificationsForUsers(tx, adminRecipientIds, {
+          type: NotificationType.REPORT_PENDING_REVIEW,
+          title: "Result waiting for review",
+          body: `${match.bracket.tournament.name}: ${matchLabel}`,
+          actionUrl: "/admin",
+          matchReportId: created.id,
+          metadata: {
+            tournamentId: match.bracket.tournamentId,
+            matchId
+          }
+        });
+      }
 
       await writeAuditLog(tx, {
         actorUserId: actor.id,
@@ -116,10 +210,25 @@ export async function POST(req: Request, ctx: RouteContext) {
         }
       });
 
+      if (isAdminActor) {
+        await writeAuditLog(tx, {
+          actorUserId: actor.id,
+          action: "MATCH_REPORT_APPROVED",
+          entityType: "MatchReport",
+          entityId: created.id,
+          tournamentId: match.bracket.tournamentId,
+          metadata: {
+            matchId,
+            winnerTeamId: body.winnerTeamId,
+            autoApproved: true
+          }
+        });
+      }
+
       return created;
     });
 
-    return NextResponse.json({ report }, { status: 201 });
+    return NextResponse.json({ report, autoApproved: isAdminActor }, { status: 201 });
   } catch (error) {
     if (error instanceof Error && error.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });

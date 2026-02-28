@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { NotificationBell } from "@/components/notification-bell";
 import { ReportMenu } from "@/components/report-menu";
 import { UserMenu } from "@/components/user-menu";
 import { getCurrentUser } from "@/lib/current-user";
@@ -25,9 +26,13 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               Simple E-Sport
             </Link>
             <nav className="relative z-[90] flex items-center gap-2">
+              <Link className="btn" href="/highscore">
+                Highscore
+              </Link>
               {user ? (
                 <>
                   <ReportMenu />
+                  <NotificationBell />
                   <UserMenu
                     displayName={user.name}
                     isAdmin={Boolean(isAdmin)}

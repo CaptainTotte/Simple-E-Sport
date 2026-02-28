@@ -27,7 +27,7 @@ export function validateUploadImage(file: File): { ok: true; ext: string } | { o
   return { ok: true, ext };
 }
 
-export async function saveUploadImage(file: File, folder: "profiles" | "teams", ext: string): Promise<string> {
+export async function saveUploadImage(file: File, folder: "profiles" | "teams" | "proofs", ext: string): Promise<string> {
   const uploadDir = path.join(process.cwd(), "public", "uploads", folder);
   await fs.mkdir(uploadDir, { recursive: true });
 

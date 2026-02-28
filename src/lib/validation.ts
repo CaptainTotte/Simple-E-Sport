@@ -97,7 +97,8 @@ export const reportMatchSchema = z.object({
         objectKey: z.string().default("manual")
       })
     )
-    .min(1)
+    .optional()
+    .default([])
 });
 
 export const approveReportSchema = z.object({

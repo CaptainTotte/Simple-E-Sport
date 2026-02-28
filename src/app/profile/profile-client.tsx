@@ -5,8 +5,11 @@ import { useEffect, useMemo, useState } from "react";
 
 type ProfileClientProps = {
   name: string;
-  username: string;
   profileImageUrl: string | null;
+  points: number;
+  matchWins: number;
+  tournamentWins: number;
+  playedTournaments: number;
 };
 
 type TeamData = {
@@ -64,7 +67,14 @@ async function callApi<T>(url: string, init?: RequestInit): Promise<T> {
   return payload as T;
 }
 
-export default function ProfileClient({ name, username, profileImageUrl: initialProfileImageUrl }: ProfileClientProps) {
+export default function ProfileClient({
+  name,
+  profileImageUrl: initialProfileImageUrl,
+  points,
+  matchWins,
+  tournamentWins,
+  playedTournaments
+}: ProfileClientProps) {
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
@@ -385,6 +395,22 @@ export default function ProfileClient({ name, username, profileImageUrl: initial
                       <div className="flex items-center justify-between border-b border-border/50 pb-2">
                         <span className="text-muted">Display Name</span>
                         <span className="font-medium">{name}</span>
+                      </div>
+                      <div className="flex items-center justify-between border-b border-border/50 pb-2">
+                        <span className="text-muted">Points</span>
+                        <span className="font-medium">{points}</span>
+                      </div>
+                      <div className="flex items-center justify-between border-b border-border/50 pb-2">
+                        <span className="text-muted">Match wins</span>
+                        <span className="font-medium">{matchWins}</span>
+                      </div>
+                      <div className="flex items-center justify-between border-b border-border/50 pb-2">
+                        <span className="text-muted">Tournament wins</span>
+                        <span className="font-medium">{tournamentWins}</span>
+                      </div>
+                      <div className="flex items-center justify-between border-b border-border/50 pb-2">
+                        <span className="text-muted">Played tournaments</span>
+                        <span className="font-medium">{playedTournaments}</span>
                       </div>
                       <div className="flex items-center justify-between border-b border-border/50 pb-2">
                         <span className="text-muted">Team</span>

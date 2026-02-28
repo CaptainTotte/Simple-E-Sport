@@ -53,6 +53,7 @@ export function ReportMenu() {
 
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(false);
+  const [proofUploading, setProofUploading] = useState(false);
   const [feedback, setFeedback] = useState("");
 
   const [tournamentId, setTournamentId] = useState("");
@@ -122,6 +123,7 @@ export function ReportMenu() {
     setTournamentId("");
     setMatchId("");
     setWinnerTeamId("");
+    setProofUrl("");
     setReviewReportId("");
     setReviewDecision("");
     void loadDashboard().catch((error) => setFeedback(error.message));
@@ -191,6 +193,29 @@ export function ReportMenu() {
     }
   }
 
+  async function uploadProofImage(file: File) {
+    const formData = new FormData();
+    formData.append("image", file);
+    setProofUploading(true);
+    setFeedback("");
+    try {
+      const response = await fetch("/api/reports/proof", {
+        method: "POST",
+        body: formData
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Could not upload proof image.");
+      }
+      setProofUrl(typeof payload.publicUrl === "string" ? payload.publicUrl : "");
+      setFeedback("Proof image uploaded.");
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Could not upload proof image.");
+    } finally {
+      setProofUploading(false);
+    }
+  }
+
   return (
     <div className="relative" ref={rootRef}>
       <button className="btn" onClick={() => setOpen((value) => !value)} type="button">
@@ -200,7 +225,6 @@ export function ReportMenu() {
       {open ? (
         <div className="absolute right-0 z-[120] mt-2 w-[440px] max-w-[92vw] rounded-md border border-border bg-[#0f1728] p-3 shadow-panel">
           <p className="text-sm font-semibold">Report Results</p>
-          {feedback ? <p className="mt-2 rounded border border-border px-2 py-1 text-xs text-muted">{feedback}</p> : null}
 
           <div className="mt-2 grid gap-2">
             <select className="input" onChange={(event) => setTournamentId(event.target.value)} value={tournamentId}>
@@ -221,6 +245,9 @@ export function ReportMenu() {
                 </option>
               ))}
             </select>
+            {tournamentId && reportableMatches.length === 0 ? (
+              <p className="text-xs text-muted">No reportable matches found for this tournament.</p>
+            ) : null}
 
             <select className="input" onChange={(event) => setWinnerTeamId(event.target.value)} value={winnerTeamId}>
               <option value="">Select</option>
@@ -251,37 +278,69 @@ export function ReportMenu() {
               />
             </div>
 
-            <input
-              className="input"
-              onChange={(event) => setProofUrl(event.target.value)}
-              placeholder="Proof image URL"
-              value={proofUrl}
-            />
+            <div className="grid gap-2 sm:grid-cols-[auto,1fr]">
+              <label className="btn cursor-pointer text-center">
+                {proofUploading ? "Uploading..." : "Upload Proof"}
+                <input
+                  accept="image/png,image/jpeg,image/webp"
+                  className="hidden"
+                  disabled={proofUploading || loading}
+                  onChange={(event) => {
+                    const file = event.target.files?.[0];
+                    if (file) {
+                      void uploadProofImage(file);
+                    }
+                    event.target.value = "";
+                  }}
+                  type="file"
+                />
+              </label>
+              <input
+                className="input"
+                onChange={(event) => setProofUrl(event.target.value)}
+                placeholder="Proof image URL"
+                value={proofUrl}
+              />
+            </div>
+            {proofUrl ? <p className="truncate text-xs text-muted">Proof ready: {proofUrl}</p> : null}
 
             <button
               className="btn btn-primary"
-              disabled={loading || !matchId || !winnerTeamId || !proofUrl.trim()}
-              onClick={() =>
-                runAction(async () => {
+              disabled={loading || proofUploading}
+              onClick={() => {
+                const proofRequired = !isAdmin;
+                const missing: string[] = [];
+                if (!tournamentId) missing.push("tournament");
+                if (!matchId) missing.push("match");
+                if (!winnerTeamId) missing.push("winner");
+                if (proofRequired && !proofUrl.trim()) missing.push("proof");
+                if (missing.length > 0) {
+                  setFeedback(`Missing: ${missing.join(", ")}.`);
+                  return;
+                }
+                const proofsPayload = proofUrl.trim()
+                  ? [
+                      {
+                        publicUrl: proofUrl.trim(),
+                        storageProvider: "manual",
+                        objectKey: proofUrl.trim()
+                      }
+                    ]
+                  : [];
+                void runAction(async () => {
                   await callApi(`/api/matches/${matchId}/report`, {
                     method: "POST",
                     body: JSON.stringify({
                       winnerTeamId,
                       scoreA,
                       scoreB,
-                      proofs: [
-                        {
-                          publicUrl: proofUrl.trim(),
-                          storageProvider: "manual",
-                          objectKey: proofUrl.trim()
-                        }
-                      ]
+                      proofs: proofsPayload
                     })
                   });
                   setProofUrl("");
                   setFeedback("Report submitted.");
-                })
-              }
+                });
+              }}
               type="button"
             >
               Submit Report
@@ -348,6 +407,7 @@ export function ReportMenu() {
               </div>
             </div>
           ) : null}
+          {feedback ? <p className="mt-3 rounded border border-border px-2 py-1 text-xs text-muted">{feedback}</p> : null}
         </div>
       ) : null}
     </div>

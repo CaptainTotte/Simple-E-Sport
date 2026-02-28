@@ -91,6 +91,18 @@ export async function POST(req: Request, ctx: RouteContext) {
         }
       });
 
+      await tx.notification.updateMany({
+        where: {
+          userId: actor.id,
+          teamInvitationId: invitation.id,
+          isRead: false
+        },
+        data: {
+          isRead: true,
+          readAt: new Date()
+        }
+      });
+
       if (body.accept) {
         await tx.teamInvitation.updateMany({
           where: {

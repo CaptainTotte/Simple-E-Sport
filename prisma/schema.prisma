@@ -73,6 +73,14 @@ enum ReportStatus {
   REJECTED
 }
 
+enum NotificationType {
+  TEAM_INVITE
+  REPORT_PENDING_REVIEW
+  REPORT_APPROVED
+  REPORT_REJECTED
+  TOURNAMENT_ADVANCEMENT
+}
+
 enum ParticipantSlot {
   A
   B
@@ -95,6 +103,7 @@ model User {
   receivedTeamInvitations TeamInvitation[]         @relation("TeamInvitee")
   submittedReports      MatchReport[]              @relation("SubmittedReports")
   reviewedReports       MatchReport[]              @relation("ReviewedReports")
+  notifications         Notification[]
   auditLogs             AuditLog[]
   createdBrackets       Bracket[]                  @relation("BracketCreator")
   createdTournaments Tournament[]             @relation("TournamentCreator")
@@ -145,6 +154,7 @@ model TeamInvitation {
   team          Team                 @relation(fields: [teamId], references: [id], onDelete: Cascade)
   inviter       User                 @relation("TeamInviter", fields: [inviterUserId], references: [id], onDelete: Cascade)
   invitee       User                 @relation("TeamInvitee", fields: [inviteeUserId], references: [id], onDelete: Cascade)
+  notifications Notification[]
 
   @@index([inviteeUserId, status])
   @@index([teamId, status])
@@ -336,6 +346,7 @@ model MatchReport {
   reviewedBy         User?        @relation("ReviewedReports", fields: [reviewedById], references: [id], onDelete: SetNull)
   proofAssets        ProofAsset[]
   approvedMatch      Match?       @relation("ApprovedReport")
+  notifications      Notification[]
 
   @@index([matchId, status])
 }
@@ -351,6 +362,28 @@ model ProofAsset {
   sha256        String?
   createdAt     DateTime    @default(now())
   report        MatchReport @relation(fields: [reportId], references: [id], onDelete: Cascade)
+}
+
+model Notification {
+  id               String           @id @default(cuid())
+  userId           String
+  type             NotificationType
+  title            String
+  body             String
+  actionUrl        String?
+  metadata         Json?
+  isRead           Boolean          @default(false)
+  readAt           DateTime?
+  teamInvitationId String?
+  matchReportId    String?
+  createdAt        DateTime         @default(now())
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamInvitation   TeamInvitation?  @relation(fields: [teamInvitationId], references: [id], onDelete: SetNull)
+  matchReport      MatchReport?     @relation(fields: [matchReportId], references: [id], onDelete: SetNull)
+
+  @@index([userId, isRead, createdAt])
+  @@index([teamInvitationId])
+  @@index([matchReportId])
 }
 
 model AuditLog {

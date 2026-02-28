@@ -141,6 +141,7 @@ export default function AdminClientPage() {
   const [scoreA, setScoreA] = useState(2);
   const [scoreB, setScoreB] = useState(0);
   const [proofUrl, setProofUrl] = useState("");
+  const [proofUploading, setProofUploading] = useState(false);
 
   const [reviewReportId, setReviewReportId] = useState("");
   const [approveReport, setApproveReport] = useState(true);
@@ -263,6 +264,29 @@ export default function AdminClientPage() {
     }
   }
 
+  async function uploadProofImage(file: File) {
+    const formData = new FormData();
+    formData.append("image", file);
+    setProofUploading(true);
+    setFeedback("");
+    try {
+      const response = await fetch("/api/reports/proof", {
+        method: "POST",
+        body: formData
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Could not upload proof image.");
+      }
+      setProofUrl(typeof payload.publicUrl === "string" ? payload.publicUrl : "");
+      setFeedback("Proof image uploaded.");
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : "Could not upload proof image.");
+    } finally {
+      setProofUploading(false);
+    }
+  }
+
   function toggleManualPoolItem(id: string) {
     setManualContextItemIds((current) => (current.includes(id) ? current.filter((value) => value !== id) : [...current, id]));
   }
@@ -284,8 +308,6 @@ export default function AdminClientPage() {
 
   return (
     <main className="container py-8">
-      {feedback ? <p className="mb-4 rounded-lg border border-border bg-surface px-3 py-2 text-sm">{feedback}</p> : null}
-
       <section className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
         <aside className="panel h-fit lg:sticky lg:top-24">
           <p className="mb-3 text-xs uppercase tracking-[0.16em] text-muted">Menus</p>
@@ -302,6 +324,9 @@ export default function AdminClientPage() {
               </button>
             ))}
           </div>
+          {feedback && activeView !== "bracket" ? (
+            <p className="mt-3 rounded-lg border border-border bg-surface px-3 py-2 text-sm">{feedback}</p>
+          ) : null}
         </aside>
 
         <div className="min-w-0">
@@ -403,7 +428,7 @@ export default function AdminClientPage() {
                       })
                     });
                     setGenerateTournamentId(created.tournament.id);
-                    setFeedback("Tournament created with game + mode.");
+                    setFeedback("Tournament created.");
                   })
                 }
                 type="button"
@@ -578,6 +603,9 @@ export default function AdminClientPage() {
                     </option>
                   ))}
                 </select>
+                {generateTournamentId && reportableMatches.length === 0 ? (
+                  <p className="text-xs text-muted">No reportable matches found for this tournament.</p>
+                ) : null}
                 <select className="input" value={reportWinnerTeamId} onChange={(event) => setReportWinnerTeamId(event.target.value)}>
                   <option value="">Select winner</option>
                   {selectedReportingMatch?.participantATeam ? (
@@ -605,24 +633,55 @@ export default function AdminClientPage() {
                     placeholder="Score B"
                   />
                 </div>
-                <input className="input" value={proofUrl} onChange={(event) => setProofUrl(event.target.value)} placeholder="Proof image URL" />
+                <div className="grid gap-2 sm:grid-cols-[auto,1fr]">
+                  <label className="btn cursor-pointer text-center">
+                    {proofUploading ? "Uploading..." : "Upload Proof"}
+                    <input
+                      accept="image/png,image/jpeg,image/webp"
+                      className="hidden"
+                      disabled={proofUploading || loading}
+                      onChange={(event) => {
+                        const file = event.target.files?.[0];
+                        if (file) {
+                          void uploadProofImage(file);
+                        }
+                        event.target.value = "";
+                      }}
+                      type="file"
+                    />
+                  </label>
+                  <input className="input" value={proofUrl} onChange={(event) => setProofUrl(event.target.value)} placeholder="Proof image URL" />
+                </div>
+                {proofUrl ? <p className="truncate text-xs text-muted">Proof ready: {proofUrl}</p> : null}
                 <button
                   className="btn"
-                  disabled={loading || !reportMatchId || !reportWinnerTeamId || !proofUrl}
-                  onClick={() =>
-                    runAction(async () => {
+                  disabled={loading || proofUploading}
+                  onClick={() => {
+                    const missing: string[] = [];
+                    if (!generateTournamentId) missing.push("tournament");
+                    if (!reportMatchId) missing.push("match");
+                    if (!reportWinnerTeamId) missing.push("winner");
+                    if (missing.length > 0) {
+                      setFeedback(`Missing: ${missing.join(", ")}.`);
+                      return;
+                    }
+                    const proofsPayload = proofUrl.trim()
+                      ? [{ publicUrl: proofUrl.trim(), storageProvider: "manual", objectKey: proofUrl.trim() }]
+                      : [];
+                    void runAction(async () => {
                       await callApi(`/api/matches/${reportMatchId}/report`, {
                         method: "POST",
                         body: JSON.stringify({
                           winnerTeamId: reportWinnerTeamId,
                           scoreA,
                           scoreB,
-                          proofs: [{ publicUrl: proofUrl, storageProvider: "manual", objectKey: proofUrl }]
+                          proofs: proofsPayload
                         })
                       });
+                      setProofUrl("");
                       setFeedback("Match report submitted.");
-                    })
-                  }
+                    });
+                  }}
                   type="button"
                 >
                   Submit Report
@@ -692,6 +751,7 @@ export default function AdminClientPage() {
                     })()}
                   </div>
                 ) : null}
+                {feedback ? <p className="rounded border border-border bg-surface px-3 py-2 text-sm">{feedback}</p> : null}
               </div>
             </article>
           ) : null}

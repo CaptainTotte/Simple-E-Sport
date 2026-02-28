@@ -2,6 +2,7 @@ import { ReportStatus } from "@prisma/client";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getUserScoreSummaries } from "@/lib/scoring";
 
 type PageProps = {
   params: {
@@ -136,6 +137,12 @@ export default async function PlayerProfilePage({ params }: PageProps) {
   const playedTournaments = [...tournamentsById.values()].sort(
     (a, b) => b.lastActivity.getTime() - a.lastActivity.getTime()
   );
+  const scoreMap = await getUserScoreSummaries(prisma);
+  const score = scoreMap.get(user.id);
+  const totalPoints = score?.points ?? 0;
+  const matchWins = score?.matchWins ?? 0;
+  const tournamentWins = score?.tournamentWins ?? 0;
+  const playedTournamentsCount = score?.playedTournaments ?? playedTournaments.length;
   const currentMembership = user.memberships[0] ?? null;
   const initials = user.name.trim().charAt(0).toUpperCase() || "?";
 
@@ -161,8 +168,20 @@ export default async function PlayerProfilePage({ params }: PageProps) {
                 <span className="max-w-[60%] truncate text-right font-medium">{user.name}</span>
               </div>
               <div className="flex items-center justify-between border-b border-border/50 pb-2">
+                <span className="text-muted">Points</span>
+                <span className="font-medium">{totalPoints}</span>
+              </div>
+              <div className="flex items-center justify-between border-b border-border/50 pb-2">
                 <span className="text-muted">Username</span>
                 <span className="font-medium">@{user.username}</span>
+              </div>
+              <div className="flex items-center justify-between border-b border-border/50 pb-2">
+                <span className="text-muted">Match wins</span>
+                <span className="font-medium">{matchWins}</span>
+              </div>
+              <div className="flex items-center justify-between border-b border-border/50 pb-2">
+                <span className="text-muted">Tournament wins</span>
+                <span className="font-medium">{tournamentWins}</span>
               </div>
               <div className="flex items-center justify-between border-b border-border/50 pb-2">
                 <span className="text-muted">Team role</span>
@@ -198,7 +217,7 @@ export default async function PlayerProfilePage({ params }: PageProps) {
 
             <div className="rounded-lg border border-border/70 bg-[#141821] p-3">
               <p className="text-xs uppercase tracking-[0.1em] text-muted">Played Tournaments</p>
-              <p className="mt-1 text-2xl font-semibold">{playedTournaments.length}</p>
+              <p className="mt-1 text-2xl font-semibold">{playedTournamentsCount}</p>
               <p className="mt-1 text-xs text-muted">Requires at least one approved result.</p>
             </div>
           </div>
