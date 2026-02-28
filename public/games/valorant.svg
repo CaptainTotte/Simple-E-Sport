@@ -1,0 +1,13 @@
+<svg width="1200" height="630" viewBox="0 0 1200 630" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1200" y2="630" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ef4444"/>
+      <stop offset="1" stop-color="#7f1d1d"/>
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" rx="40" fill="url(#g)"/>
+  <polygon points="990,50 1120,50 1120,180" fill="#fff" fill-opacity="0.08"/>
+  <circle cx="160" cy="520" r="150" fill="#fff" fill-opacity="0.06"/>
+  <text x="80" y="300" fill="#fff" font-family="Arial, sans-serif" font-size="72" font-weight="700">Valorant</text>
+  <text x="80" y="360" fill="#fff" font-family="Arial, sans-serif" font-size="36" font-weight="400" opacity="0.9">5v5 • Tactical Arena</text>
+</svg>

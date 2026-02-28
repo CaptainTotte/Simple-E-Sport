@@ -1,0 +1,10 @@
+{
+  "/admin/page": "app/admin/page.js",
+  "/api/tournaments/route": "app/api/tournaments/route.js",
+  "/api/games/route": "app/api/games/route.js",
+  "/page": "app/page.js",
+  "/api/tournaments/[id]/route": "app/api/tournaments/[id]/route.js",
+  "/api/reports/dashboard/route": "app/api/reports/dashboard/route.js",
+  "/profile/page": "app/profile/page.js",
+  "/tournaments/[id]/page": "app/tournaments/[id]/page.js"
+}
