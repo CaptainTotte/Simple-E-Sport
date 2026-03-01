@@ -91,9 +91,11 @@ export async function POST(req: Request, ctx: RouteContext) {
           isActive: true
         }
       });
-      const suggested = suggestedRandomPoolSize(tournament.teamLimit);
-      const preferred = body.randomPoolSize ?? suggested;
-      resolvedRandomPoolSize = Math.max(1, Math.min(preferred, Math.max(1, availableContextCount)));
+      if (availableContextCount > 0) {
+        const suggested = suggestedRandomPoolSize(tournament.teamLimit);
+        const preferred = body.randomPoolSize ?? suggested;
+        resolvedRandomPoolSize = Math.max(1, Math.min(preferred, availableContextCount));
+      }
     }
 
     const result = await prisma.$transaction(async (tx) => {

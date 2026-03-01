@@ -49,30 +49,6 @@ type Tournament = {
   };
 };
 
-type TournamentDetail = {
-  id: string;
-  bracket: {
-    matches: Array<{
-      id: string;
-      round: number;
-      position: number;
-      status: string;
-      participantATeam: { id: string; name: string } | null;
-      participantBTeam: { id: string; name: string } | null;
-      reports: Array<{
-        id: string;
-        status: string;
-        scoreA: number;
-        scoreB: number;
-        claimedWinnerTeamId: string;
-        proofAssets: Array<{
-          publicUrl: string;
-        }>;
-      }>;
-    }>;
-  } | null;
-};
-
 type TeamRecord = {
   id: string;
   name: string;
@@ -128,7 +104,7 @@ type AdminUserRecord = {
   };
 };
 
-type AdminView = "create" | "teams" | "users" | "bracket" | "tournaments" | "advanced";
+type AdminView = "create" | "teams" | "users" | "tournaments" | "advanced";
 
 async function callApi<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
@@ -170,51 +146,14 @@ export default function AdminClientPage() {
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
   const [timeoutDialog, setTimeoutDialog] = useState<{ userId: string; days: 3 | 14 | 30 } | null>(null);
   const [usernameDialog, setUsernameDialog] = useState<{ userId: string; value: string } | null>(null);
-
-  const [generateTournamentId, setGenerateTournamentId] = useState("");
-  const [reportingData, setReportingData] = useState<TournamentDetail | null>(null);
-  const [reportMatchId, setReportMatchId] = useState("");
-  const [reportWinnerTeamId, setReportWinnerTeamId] = useState("");
-  const [scoreA, setScoreA] = useState(2);
-  const [scoreB, setScoreB] = useState(0);
-  const [proofUrl, setProofUrl] = useState("");
-  const [proofUploading, setProofUploading] = useState(false);
-
-  const [reviewReportId, setReviewReportId] = useState("");
-  const [approveReport, setApproveReport] = useState(true);
-  const [decisionNote, setDecisionNote] = useState("");
+  const [adminToggleDialog, setAdminToggleDialog] = useState<{ userId: string; name: string; enable: boolean } | null>(null);
+  const [deleteDialog, setDeleteDialog] = useState<{ kind: "team" | "user"; id: string; name: string } | null>(null);
   const [userQuery, setUserQuery] = useState("");
   const [userFilter, setUserFilter] = useState<"all" | "active" | "timed_out" | "banned" | "admins" | "players">("all");
 
   const selectedGame = useMemo(() => games.find((game) => game.id === rulesetGameId), [games, rulesetGameId]);
   const randomPoolAllowed = selectedGame?.randomPoolAllowed ?? true;
-  const selectedReportingMatch = useMemo(
-    () => reportingData?.bracket?.matches.find((match) => match.id === reportMatchId) ?? null,
-    [reportingData, reportMatchId]
-  );
-  const reportableMatches = useMemo(
-    () =>
-      (reportingData?.bracket?.matches ?? []).filter((match) => {
-        const hasPending = match.reports.some((report) => report.status === "SUBMITTED");
-        return match.status === "READY" && !hasPending;
-      }),
-    [reportingData]
-  );
-  const pendingReports = useMemo(
-    () =>
-      (reportingData?.bracket?.matches ?? []).flatMap((match) =>
-        match.reports
-          .filter((report) => report.status === "SUBMITTED")
-          .map((report) => ({
-            ...report,
-            matchId: match.id,
-            matchRound: match.round,
-            matchPosition: match.position,
-            matchLabel: `${match.participantATeam?.name ?? "TBD"} vs ${match.participantBTeam?.name ?? "TBD"}`
-          }))
-      ),
-    [reportingData]
-  );
+  const gameHasContextPool = (selectedGame?.contextItems.length ?? 0) > 0;
   const selectedTeamRecord = useMemo(
     () => teams.find((team) => team.id === expandedTeamId) ?? null,
     [teams, expandedTeamId]
@@ -223,10 +162,18 @@ export default function AdminClientPage() {
     () => users.find((user) => user.id === expandedUserId) ?? null,
     [users, expandedUserId]
   );
+  const selectedUserIsAdmin = selectedUserRecord
+    ? selectedUserRecord.globalRole === "PLATFORM_ADMIN" || selectedUserRecord.globalRole === "TOURNAMENT_ADMIN"
+    : false;
+  const selectedUserIsSuperuser = selectedUserRecord?.globalRole === "PLATFORM_ADMIN";
   const selectedUserModerationLocked = selectedUserRecord
-    ? selectedUserRecord.isSelf ||
-      selectedUserRecord.globalRole === "PLATFORM_ADMIN" ||
-      selectedUserRecord.globalRole === "TOURNAMENT_ADMIN"
+    ? selectedUserRecord.isSelf || selectedUserIsSuperuser
+    : true;
+  const selectedUserAdminToggleLocked = selectedUserRecord
+    ? selectedUserRecord.isSelf || selectedUserIsSuperuser
+    : true;
+  const selectedUserDeleteLocked = selectedUserRecord
+    ? selectedUserRecord.isSelf || selectedUserIsSuperuser
     : true;
   const filteredUsers = useMemo(() => {
     const query = userQuery.trim().toLowerCase();
@@ -269,15 +216,6 @@ export default function AdminClientPage() {
       return searchable.includes(query);
     });
   }, [users, userQuery, userFilter]);
-  async function loadReportingData(tournamentId: string) {
-    if (!tournamentId) {
-      setReportingData(null);
-      return;
-    }
-    const data = await callApi<{ tournament: TournamentDetail }>(`/api/tournaments/${tournamentId}`);
-    setReportingData(data.tournament);
-  }
-
   async function loadData() {
     const [gamesData, tournamentsData, teamsData, usersData] = await Promise.all([
       callApi<{ games: Game[] }>("/api/games"),
@@ -297,57 +235,24 @@ export default function AdminClientPage() {
   }, []);
 
   useEffect(() => {
-    void loadReportingData(generateTournamentId).catch((error) => showToast(error.message, "error"));
-  }, [generateTournamentId]);
-
-  useEffect(() => {
-    setGenerateTournamentId((current) => {
-      if (tournaments.length === 0) {
-        return "";
-      }
-      if (current && tournaments.some((tournament) => tournament.id === current)) {
-        return current;
-      }
-      return tournaments[0].id;
-    });
-  }, [tournaments]);
-
-  useEffect(() => {
     if (!selectedGame) {
       setRulesetModeId("");
       return;
     }
+    if (selectedGame.contextItems.length === 0) {
+      if (poolStrategy !== "RANDOM") {
+        setPoolStrategy("RANDOM");
+      }
+      setManualContextItemIds([]);
+    }
     if (!selectedGame.modes.find((mode) => mode.id === rulesetModeId)) {
       setRulesetModeId(selectedGame.modes[0]?.id ?? "");
     }
-    if (!selectedGame.randomPoolAllowed && poolStrategy === "RANDOM") {
+    if (selectedGame.contextItems.length > 0 && !selectedGame.randomPoolAllowed && poolStrategy === "RANDOM") {
       setPoolStrategy("MANUAL");
     }
     setManualContextItemIds((previous) => previous.filter((id) => selectedGame.contextItems.some((item) => item.id === id)));
   }, [selectedGame, rulesetModeId, poolStrategy]);
-
-  useEffect(() => {
-    if (!selectedReportingMatch) {
-      setReportWinnerTeamId("");
-      return;
-    }
-    const allowedIds = [selectedReportingMatch.participantATeam?.id, selectedReportingMatch.participantBTeam?.id].filter(
-      (teamId): teamId is string => Boolean(teamId)
-    );
-    setReportWinnerTeamId((current) => (allowedIds.includes(current) ? current : allowedIds[0] ?? ""));
-  }, [selectedReportingMatch]);
-
-  useEffect(() => {
-    if (!reportableMatches.find((match) => match.id === reportMatchId)) {
-      setReportMatchId(reportableMatches[0]?.id ?? "");
-    }
-  }, [reportableMatches, reportMatchId]);
-
-  useEffect(() => {
-    if (!pendingReports.find((report) => report.id === reviewReportId)) {
-      setReviewReportId(pendingReports[0]?.id ?? "");
-    }
-  }, [pendingReports, reviewReportId]);
 
   useEffect(() => {
     if (!expandedTeamId && !expandedUserId) {
@@ -367,6 +272,7 @@ export default function AdminClientPage() {
     if (!selectedUserRecord) {
       setTimeoutDialog(null);
       setUsernameDialog(null);
+      setAdminToggleDialog(null);
     }
   }, [selectedUserRecord]);
 
@@ -379,28 +285,6 @@ export default function AdminClientPage() {
       showToast(error instanceof Error ? error.message : "Unexpected error.", "error");
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function uploadProofImage(file: File) {
-    const formData = new FormData();
-    formData.append("image", file);
-    setProofUploading(true);
-    try {
-      const response = await fetch("/api/reports/proof", {
-        method: "POST",
-        body: formData
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload.error ?? "Could not upload proof image.");
-      }
-      setProofUrl(typeof payload.publicUrl === "string" ? payload.publicUrl : "");
-      showToast("Proof image uploaded.", "success");
-    } catch (error) {
-      showToast(error instanceof Error ? error.message : "Could not upload proof image.", "error");
-    } finally {
-      setProofUploading(false);
     }
   }
 
@@ -429,10 +313,6 @@ export default function AdminClientPage() {
     try {
       await callApi(`/api/tournaments/${tournamentId}`, { method: "DELETE" });
       setTournaments((current) => current.filter((tournament) => tournament.id !== tournamentId));
-      if (generateTournamentId === tournamentId) {
-        setGenerateTournamentId("");
-        setReportingData(null);
-      }
       showToast("Tournament deleted.", "success");
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Could not delete tournament.", "error");
@@ -449,7 +329,8 @@ export default function AdminClientPage() {
       | { action: "ban" }
       | { action: "unban" }
       | { action: "set_username"; username: string }
-      | { action: "remove_avatar" },
+      | { action: "remove_avatar" }
+      | { action: "set_admin"; enabled: boolean },
     successMessage: string
   ) {
     await runAction(async () => {
@@ -475,6 +356,7 @@ export default function AdminClientPage() {
 
   function openTimeoutDialog(userId: string) {
     setUsernameDialog(null);
+    setAdminToggleDialog(null);
     setTimeoutDialog({ userId, days: 3 });
   }
 
@@ -489,6 +371,7 @@ export default function AdminClientPage() {
 
   function openUsernameDialog(userId: string, currentUsername: string | null) {
     setTimeoutDialog(null);
+    setAdminToggleDialog(null);
     setUsernameDialog({ userId, value: currentUsername ?? "" });
   }
 
@@ -513,9 +396,60 @@ export default function AdminClientPage() {
     );
   }
 
+  function triggerAdminToggle(user: AdminUserRecord) {
+    const nextEnabled = !(user.globalRole === "PLATFORM_ADMIN" || user.globalRole === "TOURNAMENT_ADMIN");
+
+    if (!nextEnabled) {
+      void applyUserAction(user.id, { action: "set_admin", enabled: false }, "Admin removed.");
+      return;
+    }
+
+    setTimeoutDialog(null);
+    setUsernameDialog(null);
+    setDeleteDialog(null);
+    setAdminToggleDialog({
+      userId: user.id,
+      name: user.name,
+      enable: true
+    });
+  }
+
+  function submitAdminToggleDialog() {
+    if (!adminToggleDialog) {
+      return;
+    }
+    const dialog = adminToggleDialog;
+    setAdminToggleDialog(null);
+    void applyUserAction(
+      dialog.userId,
+      { action: "set_admin", enabled: dialog.enable },
+      dialog.enable ? "Admin granted." : "Admin removed."
+    );
+  }
+
+  function openDeleteDialog(kind: "team" | "user", id: string, name: string) {
+    setTimeoutDialog(null);
+    setUsernameDialog(null);
+    setAdminToggleDialog(null);
+    setDeleteDialog({ kind, id, name });
+  }
+
+  function submitDeleteDialog() {
+    if (!deleteDialog) {
+      return;
+    }
+    const dialog = deleteDialog;
+    setDeleteDialog(null);
+    if (dialog.kind === "team") {
+      void deleteTeam(dialog.id, dialog.name);
+      return;
+    }
+    void deleteUser(dialog.id);
+  }
+
   function roleLabel(role: AdminUserRecord["globalRole"]) {
-    if (role === "PLATFORM_ADMIN") return "Platform Admin";
-    if (role === "TOURNAMENT_ADMIN") return "Tournament Admin";
+    if (role === "PLATFORM_ADMIN") return "Superuser";
+    if (role === "TOURNAMENT_ADMIN") return "Admin";
     if (role === "TEAM_CAPTAIN") return "Team Captain";
     return "Player";
   }
@@ -556,7 +490,6 @@ export default function AdminClientPage() {
     { id: "create", label: "Create Tournament", helper: "Create with game, mode and pool" },
     { id: "teams", label: "Teams", helper: "Create and manage teams" },
     { id: "users", label: "Users", helper: "Moderate player accounts" },
-    { id: "bracket", label: "Reports", helper: "Submit and review reports" },
     { id: "tournaments", label: "Tournaments", helper: "View and delete events" },
     { id: "advanced", label: "Advanced", helper: "Maintenance tools" }
   ];
@@ -597,7 +530,7 @@ export default function AdminClientPage() {
                   className="input min-h-24"
                   value={createRules}
                   onChange={(event) => setCreateRules(event.target.value)}
-                  placeholder="Rules (shown in Regler tab)"
+                  placeholder="Rules"
                 />
                 <select
                   className="input"
@@ -627,40 +560,48 @@ export default function AdminClientPage() {
                   ))}
                 </select>
 
-                <select className="input" value={poolStrategy} onChange={(event) => setPoolStrategy(event.target.value as "RANDOM" | "MANUAL")}>
-                  {randomPoolAllowed ? <option value="RANDOM">Random pool</option> : null}
-                  <option value="MANUAL">Manual pool</option>
-                </select>
+                {gameHasContextPool ? (
+                  <>
+                    <select className="input" value={poolStrategy} onChange={(event) => setPoolStrategy(event.target.value as "RANDOM" | "MANUAL")}>
+                      {randomPoolAllowed ? <option value="RANDOM">Random pool</option> : null}
+                      <option value="MANUAL">Manual pool</option>
+                    </select>
 
-                {!randomPoolAllowed ? (
-                  <p className="rounded-lg border border-border/70 bg-[#161B22] p-3 text-xs text-muted">
-                    This game supports manual pool only.
+                    {!randomPoolAllowed ? (
+                      <p className="rounded-lg border border-border/70 bg-[#181A1F] p-3 text-xs text-muted">
+                        This game supports manual pool only.
+                      </p>
+                    ) : null}
+
+                    {poolStrategy === "RANDOM" ? (
+                      <p className="rounded-lg border border-border/70 bg-[#181A1F] p-3 text-xs text-muted">
+                        Random pool size is set automatically based on tournament slots (4/8/16 teams).
+                      </p>
+                    ) : (
+                      <div className="rounded-lg border border-border/70 bg-[#181A1F] p-3">
+                        <p className="mb-2 text-xs uppercase tracking-[0.14em] text-muted">
+                          {selectedGame?.contextLabelPlural ?? "Pool items"}
+                        </p>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {selectedGame?.contextItems.map((contextItem) => (
+                            <label className="flex items-center gap-2 text-sm" key={contextItem.id}>
+                              <input
+                                checked={manualContextItemIds.includes(contextItem.id)}
+                                onChange={() => toggleManualPoolItem(contextItem.id)}
+                                type="checkbox"
+                              />
+                              <span>{contextItem.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : selectedGame ? (
+                  <p className="rounded-lg border border-border/70 bg-[#181A1F] p-3 text-xs text-muted">
+                    This game has no map/arena pool.
                   </p>
                 ) : null}
-
-                {poolStrategy === "RANDOM" ? (
-                  <p className="rounded-lg border border-border/70 bg-[#161B22] p-3 text-xs text-muted">
-                    Random pool size is set automatically based on tournament slots (4/8/16 teams).
-                  </p>
-                ) : (
-                  <div className="rounded-lg border border-border/70 bg-[#161B22] p-3">
-                    <p className="mb-2 text-xs uppercase tracking-[0.14em] text-muted">
-                      {selectedGame?.contextLabelPlural ?? "Pool items"}
-                    </p>
-                    <div className="grid gap-2 sm:grid-cols-2">
-                      {selectedGame?.contextItems.map((contextItem) => (
-                        <label className="flex items-center gap-2 text-sm" key={contextItem.id}>
-                          <input
-                            checked={manualContextItemIds.includes(contextItem.id)}
-                            onChange={() => toggleManualPoolItem(contextItem.id)}
-                            type="checkbox"
-                          />
-                          <span>{contextItem.name}</span>
-                        </label>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
               <button
                 className="btn btn-primary mt-3"
@@ -675,17 +616,18 @@ export default function AdminClientPage() {
                         teamLimit: createTeamLimit
                       })
                     });
-                    const poolItems = poolStrategy === "MANUAL" ? manualContextItemIds.map((contextItemId) => ({ contextItemId })) : [];
+                    const resolvedPoolStrategy: "RANDOM" | "MANUAL" = gameHasContextPool ? poolStrategy : "RANDOM";
+                    const poolItems =
+                      resolvedPoolStrategy === "MANUAL" ? manualContextItemIds.map((contextItemId) => ({ contextItemId })) : [];
                     await callApi(`/api/tournaments/${created.tournament.id}/ruleset`, {
                       method: "POST",
                       body: JSON.stringify({
                         gameId: rulesetGameId,
                         modeId: rulesetModeId,
-                        poolStrategy,
+                        poolStrategy: resolvedPoolStrategy,
                         poolItems
                       })
                     });
-                    setGenerateTournamentId(created.tournament.id);
                     showToast("Tournament created.", "success");
                   })
                 }
@@ -772,7 +714,7 @@ export default function AdminClientPage() {
                     <tbody>
                       {teams.map((team) => (
                         <tr
-                          className="group cursor-pointer border-b border-border/60 transition-colors hover:bg-[#1C212B]/70"
+                          className="group cursor-pointer border-b border-border/60 transition-colors hover:bg-[#202329]/70"
                           key={team.id}
                           onClick={() => {
                             setExpandedTeamId(team.id);
@@ -781,10 +723,10 @@ export default function AdminClientPage() {
                         >
                           <td className="py-2">
                             <div className="min-w-0">
-                              <p className="truncate font-medium transition-colors group-hover:text-[#7C3AED]" title={team.name}>
+                              <p className="truncate font-medium transition-colors group-hover:text-[#7C6EFF]" title={team.name}>
                                 {team.name}
                               </p>
-                              {team.tag ? <p className="text-xs text-muted transition-colors group-hover:text-[#9aa4c2]">[{team.tag}]</p> : null}
+                              {team.tag ? <p className="text-xs text-muted transition-colors group-hover:text-secondary">[{team.tag}]</p> : null}
                             </div>
                           </td>
                           <td className="py-2">{team.pendingInvites.length}</td>
@@ -796,7 +738,7 @@ export default function AdminClientPage() {
                               disabled={loading}
                               onClick={(event) => {
                                 event.stopPropagation();
-                                void deleteTeam(team.id, team.name);
+                                openDeleteDialog("team", team.id, team.name);
                               }}
                               title={`Delete ${team.name}`}
                               type="button"
@@ -807,7 +749,7 @@ export default function AdminClientPage() {
                                   stroke="currentColor"
                                   strokeLinecap="round"
                                   strokeLinejoin="round"
-                                  strokeWidth="1.7"
+                                  strokeWidth="1.45"
                                 />
                               </svg>
                             </button>
@@ -864,7 +806,7 @@ export default function AdminClientPage() {
                     <tbody>
                       {filteredUsers.map((user) => (
                         <tr
-                          className="group cursor-pointer border-b border-border/60 transition-colors hover:bg-[#1C212B]/70"
+                          className="group cursor-pointer border-b border-border/60 transition-colors hover:bg-[#202329]/70"
                           key={user.id}
                           onClick={() => {
                             setExpandedUserId(user.id);
@@ -873,10 +815,10 @@ export default function AdminClientPage() {
                         >
                           <td className="py-2">
                             <div className="min-w-0">
-                              <p className="truncate font-medium transition-colors group-hover:text-[#7C3AED]" title={user.name}>
+                              <p className="truncate font-medium transition-colors group-hover:text-[#7C6EFF]" title={user.name}>
                                 {user.name}
                               </p>
-                              <p className="truncate text-xs text-muted transition-colors group-hover:text-[#9aa4c2]" title={user.username ?? ""}>
+                              <p className="truncate text-xs text-muted transition-colors group-hover:text-secondary" title={user.username ?? ""}>
                                 @{user.username ?? "no-username"}
                               </p>
                             </div>
@@ -913,182 +855,6 @@ export default function AdminClientPage() {
                   </table>
                 </div>
               </section>
-            </article>
-          ) : null}
-
-          {activeView === "bracket" ? (
-            <article className="panel">
-              <h2 className="text-lg font-semibold">Reports</h2>
-              <div className="mt-3 grid gap-2">
-                <label className="text-sm text-muted">Tournament for reports</label>
-                <select className="input" value={generateTournamentId} onChange={(event) => setGenerateTournamentId(event.target.value)}>
-                  <option value="">Select tournament</option>
-                  {tournaments.map((tournament) => (
-                    <option key={tournament.id} value={tournament.id}>
-                      {tournament.name}
-                    </option>
-                  ))}
-                </select>
-                <hr className="my-1 border-border" />
-                <label className="text-sm text-muted">Submit match report</label>
-                <select className="input" value={reportMatchId} onChange={(event) => setReportMatchId(event.target.value)}>
-                  <option value="">Select ready match</option>
-                  {reportableMatches.map((match) => (
-                    <option key={match.id} value={match.id}>
-                      R{match.round} M{match.position}: {match.participantATeam?.name ?? "TBD"} vs{" "}
-                      {match.participantBTeam?.name ?? "TBD"}
-                    </option>
-                  ))}
-                </select>
-                {generateTournamentId && reportableMatches.length === 0 ? (
-                  <p className="text-xs text-muted">No reportable matches found for this tournament.</p>
-                ) : null}
-                <select className="input" value={reportWinnerTeamId} onChange={(event) => setReportWinnerTeamId(event.target.value)}>
-                  <option value="">Select winner</option>
-                  {selectedReportingMatch?.participantATeam ? (
-                    <option value={selectedReportingMatch.participantATeam.id}>{selectedReportingMatch.participantATeam.name}</option>
-                  ) : null}
-                  {selectedReportingMatch?.participantBTeam ? (
-                    <option value={selectedReportingMatch.participantBTeam.id}>{selectedReportingMatch.participantBTeam.name}</option>
-                  ) : null}
-                </select>
-                <div className="grid grid-cols-2 gap-2">
-                  <input
-                    className="input"
-                    type="number"
-                    min={0}
-                    value={scoreA}
-                    onChange={(event) => setScoreA(Number(event.target.value) || 0)}
-                    placeholder="Score A"
-                  />
-                  <input
-                    className="input"
-                    type="number"
-                    min={0}
-                    value={scoreB}
-                    onChange={(event) => setScoreB(Number(event.target.value) || 0)}
-                    placeholder="Score B"
-                  />
-                </div>
-                <div className="grid gap-2 sm:grid-cols-[auto,1fr]">
-                  <label className="btn cursor-pointer text-center">
-                    {proofUploading ? "Uploading..." : "Upload Proof"}
-                    <input
-                      accept="image/png,image/jpeg,image/webp"
-                      className="hidden"
-                      disabled={proofUploading || loading}
-                      onChange={(event) => {
-                        const file = event.target.files?.[0];
-                        if (file) {
-                          void uploadProofImage(file);
-                        }
-                        event.target.value = "";
-                      }}
-                      type="file"
-                    />
-                  </label>
-                  <input className="input" value={proofUrl} onChange={(event) => setProofUrl(event.target.value)} placeholder="Proof image URL" />
-                </div>
-                {proofUrl ? <p className="truncate text-xs text-muted">Proof ready: {proofUrl}</p> : null}
-                <button
-                  className="btn"
-                  disabled={loading || proofUploading}
-                  onClick={() => {
-                    const missing: string[] = [];
-                    if (!generateTournamentId) missing.push("tournament");
-                    if (!reportMatchId) missing.push("match");
-                    if (!reportWinnerTeamId) missing.push("winner");
-                    if (missing.length > 0) {
-                      showToast(`Missing: ${missing.join(", ")}.`, "error");
-                      return;
-                    }
-                    const proofsPayload = proofUrl.trim()
-                      ? [{ publicUrl: proofUrl.trim(), storageProvider: "manual", objectKey: proofUrl.trim() }]
-                      : [];
-                    void runAction(async () => {
-                      await callApi(`/api/matches/${reportMatchId}/report`, {
-                        method: "POST",
-                        body: JSON.stringify({
-                          winnerTeamId: reportWinnerTeamId,
-                          scoreA,
-                          scoreB,
-                          proofs: proofsPayload
-                        })
-                      });
-                      setProofUrl("");
-                      showToast("Match report submitted.", "success");
-                    });
-                  }}
-                  type="button"
-                >
-                  Submit Report
-                </button>
-
-                <hr className="my-1 border-border" />
-                <label className="text-sm text-muted">Admin review report</label>
-                <select className="input" value={reviewReportId} onChange={(event) => setReviewReportId(event.target.value)}>
-                  <option value="">Select pending report</option>
-                  {pendingReports.map((report) => (
-                    <option key={report.id} value={report.id}>
-                      R{report.matchRound} M{report.matchPosition}: {report.matchLabel}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  className="input"
-                  value={approveReport ? "approve" : "reject"}
-                  onChange={(event) => setApproveReport(event.target.value === "approve")}
-                >
-                  <option value="approve">Approve</option>
-                  <option value="reject">Reject</option>
-                </select>
-                <input
-                  className="input"
-                  value={decisionNote}
-                  onChange={(event) => setDecisionNote(event.target.value)}
-                  placeholder="Decision note"
-                />
-                <button
-                  className="btn"
-                  disabled={loading || !reviewReportId}
-                  onClick={() =>
-                    runAction(async () => {
-                      await callApi(`/api/reports/${reviewReportId}/approve`, {
-                        method: "POST",
-                        body: JSON.stringify({
-                          approve: approveReport,
-                          decisionNote
-                        })
-                      });
-                      showToast(`Report ${approveReport ? "approved" : "rejected"}.`, "success");
-                    })
-                  }
-                  type="button"
-                >
-                  Submit Review
-                </button>
-                {pendingReports.find((report) => report.id === reviewReportId) ? (
-                  <div className="rounded border border-border/60 bg-[#161B22] p-2 text-xs text-muted">
-                    {(() => {
-                      const report = pendingReports.find((item) => item.id === reviewReportId);
-                      if (!report) {
-                        return null;
-                      }
-                      return (
-                        <>
-                          <p>
-                            Selected: {report.matchLabel} (R{report.matchRound} M{report.matchPosition})
-                          </p>
-                          <p>
-                            Score: {report.scoreA} - {report.scoreB}
-                          </p>
-                          <p className="truncate">Proof: {report.proofAssets[0]?.publicUrl ?? "No proof url"}</p>
-                        </>
-                      );
-                    })()}
-                  </div>
-                ) : null}
-              </div>
             </article>
           ) : null}
 
@@ -1143,7 +909,6 @@ export default function AdminClientPage() {
                                   method: "POST",
                                   body: JSON.stringify({})
                                 });
-                                setGenerateTournamentId(tournament.id);
                                 showToast(`Bracket generated for ${tournament.name}.`, "success");
                               })
                             }
@@ -1154,17 +919,17 @@ export default function AdminClientPage() {
                               aria-hidden="true"
                               className="transition-transform duration-300 group-hover:rotate-180"
                               fill="none"
-                              height="30"
-                              style={{ width: 30, height: 30, minWidth: 30, minHeight: 30, display: "block" }}
+                              height="16"
+                              style={{ width: 16, height: 16, minWidth: 16, minHeight: 16, display: "block" }}
                               viewBox="0 0 24 24"
-                              width="30"
+                              width="16"
                             >
                               <path
                                 d="M21 12a9 9 0 0 1-15.5 6.4L3 16m0 0h4m-4 0v4M3 12a9 9 0 0 1 15.5-6.4L21 8m0 0h-4m4 0V4"
                                 stroke="currentColor"
                                 strokeLinecap="round"
                                 strokeLinejoin="round"
-                                strokeWidth="1.8"
+                                strokeWidth="1.45"
                               />
                             </svg>
                           </button>
@@ -1179,19 +944,19 @@ export default function AdminClientPage() {
                               <svg
                                 aria-hidden="true"
                                 fill="none"
-                                height="30"
-                                style={{ width: 30, height: 30, minWidth: 30, minHeight: 30, display: "block" }}
+                                height="16"
+                                style={{ width: 16, height: 16, minWidth: 16, minHeight: 16, display: "block" }}
                                 viewBox="0 0 24 24"
-                                width="30"
+                                width="16"
                               >
                                 <path
                                   d="M1.5 12S5.5 5.5 12 5.5 22.5 12 22.5 12 18.5 18.5 12 18.5 1.5 12 1.5 12Z"
                                   stroke="currentColor"
                                   strokeLinecap="round"
                                   strokeLinejoin="round"
-                                  strokeWidth="1.8"
+                                  strokeWidth="1.45"
                                 />
-                                <circle cx="12" cy="12" r="2.8" stroke="currentColor" strokeWidth="1.8" />
+                                <circle cx="12" cy="12" r="2.8" stroke="currentColor" strokeWidth="1.45" />
                               </svg>
                             </Link>
                             <button
@@ -1205,17 +970,17 @@ export default function AdminClientPage() {
                               <svg
                                 aria-hidden="true"
                                 fill="none"
-                                height="30"
-                                style={{ width: 30, height: 30, minWidth: 30, minHeight: 30, display: "block" }}
+                                height="16"
+                                style={{ width: 16, height: 16, minWidth: 16, minHeight: 16, display: "block" }}
                                 viewBox="0 0 24 24"
-                                width="30"
+                                width="16"
                               >
                                 <path
                                   d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m-9 0 1 12a1 1 0 0 0 1 .9h8a1 1 0 0 0 1-.9L18 7M10 11v6M14 11v6"
                                   stroke="currentColor"
                                   strokeLinecap="round"
                                   strokeLinejoin="round"
-                                  strokeWidth="1.8"
+                                  strokeWidth="1.45"
                                 />
                               </svg>
                             </button>
@@ -1256,13 +1021,18 @@ export default function AdminClientPage() {
       {selectedTeamRecord ? (
         <div
           className="modal-overlay"
-          onClick={() => setExpandedTeamId(null)}
           role="dialog"
           aria-modal="true"
           aria-label="Team card modal"
         >
+          <button
+            aria-label="Close team modal"
+            className="absolute inset-0"
+            onClick={() => setExpandedTeamId(null)}
+            type="button"
+          />
           <article
-            className="modal-card pointer-events-auto w-[min(940px,94vw)] p-4"
+            className="modal-card pointer-events-auto relative z-[1] w-[min(940px,94vw)] p-4"
             onClick={(event) => event.stopPropagation()}
             onMouseDown={(event) => event.stopPropagation()}
           >
@@ -1277,13 +1047,8 @@ export default function AdminClientPage() {
               <div className="flex items-center gap-2">
                 <button
                   className="btn !border-[#EF4444] !bg-[#2A1318] !text-[#EF4444] hover:!border-[#EF4444] hover:!bg-[#3a1a21]"
-                  disabled={loading}
                   onClick={() => {
-                    const confirmed = window.confirm("Delete this team permanently?");
-                    if (!confirmed) {
-                      return;
-                    }
-                    void deleteTeam(selectedTeamRecord.id, selectedTeamRecord.name);
+                    openDeleteDialog("team", selectedTeamRecord.id, selectedTeamRecord.name);
                   }}
                   type="button"
                 >
@@ -1296,9 +1061,9 @@ export default function AdminClientPage() {
             </div>
 
             <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
-              <div className="rounded-lg border border-border/70 bg-[#161B22] p-3">
+              <div className="rounded-lg border border-border/70 bg-[#181A1F] p-3">
                 <div className="flex flex-col items-start">
-                  <div className="flex h-28 w-28 items-center justify-center rounded-md border border-border/70 bg-[#0D1117] text-sm text-muted">
+                  <div className="flex h-28 w-28 items-center justify-center rounded-md border border-border/70 bg-[#0E0F12] text-sm text-muted">
                     No logo
                   </div>
                   <p className="mt-3 text-lg font-semibold">{selectedTeamRecord.name}</p>
@@ -1311,13 +1076,13 @@ export default function AdminClientPage() {
                 </div>
               </div>
 
-              <div className="rounded-lg border border-border/70 bg-[#161B22] p-3">
+              <div className="rounded-lg border border-border/70 bg-[#181A1F] p-3">
                 <p className="mb-2 text-xs uppercase tracking-[0.1em] text-muted">Members</p>
                 <div className="grid gap-2 sm:grid-cols-2">
                   {selectedTeamRecord.members.map((member) => (
-                    <div className="rounded-md border border-border/70 bg-[#11151C] p-2" key={member.id}>
+                    <div className="rounded-md border border-border/70 bg-[#111317] p-2" key={member.id}>
                       {member.username ? (
-                        <Link className="font-medium transition-colors hover:text-[#7C3AED]" href={`/players/${member.username}`}>
+                        <Link className="font-medium transition-colors hover:text-[#7C6EFF]" href={`/players/${member.username}`}>
                           {member.name}
                         </Link>
                       ) : (
@@ -1336,13 +1101,18 @@ export default function AdminClientPage() {
       {selectedUserRecord ? (
         <div
           className="modal-overlay"
-          onClick={() => setExpandedUserId(null)}
           role="dialog"
           aria-modal="true"
           aria-label="Player card modal"
         >
+          <button
+            aria-label="Close player modal"
+            className="absolute inset-0"
+            onClick={() => setExpandedUserId(null)}
+            type="button"
+          />
           <article
-            className="modal-card pointer-events-auto relative w-[min(1000px,94vw)] p-4"
+            className="modal-card pointer-events-auto relative z-[1] w-[min(1000px,94vw)] p-4"
             onClick={(event) => event.stopPropagation()}
             onMouseDown={(event) => event.stopPropagation()}
           >
@@ -1353,14 +1123,43 @@ export default function AdminClientPage() {
               </div>
               <div className="flex items-center gap-2">
                 <button
+                  aria-label={selectedUserIsAdmin ? "Remove admin" : "Grant admin"}
+                  className={`btn inline-flex h-10 w-10 shrink-0 items-center justify-center p-0 ${
+                    selectedUserIsAdmin ? "!border-[#FACC15] !bg-[#3A2F08] !text-[#FACC15]" : "!text-[#FACC15]"
+                  }`}
+                  disabled={loading || selectedUserAdminToggleLocked}
+                  onClick={() => triggerAdminToggle(selectedUserRecord)}
+                  title={
+                    selectedUserIsSuperuser
+                      ? "Superuser cannot be demoted"
+                      : selectedUserIsAdmin
+                        ? "Remove admin"
+                        : "Make admin"
+                  }
+                  type="button"
+                >
+                  <svg
+                    aria-hidden="true"
+                    fill={selectedUserIsAdmin ? "currentColor" : "none"}
+                    height="16"
+                    style={{ width: 16, height: 16, minWidth: 16, minHeight: 16, display: "block" }}
+                    viewBox="0 0 24 24"
+                    width="16"
+                  >
+                    <path
+                      d="M3 7.5 7 12l5-7 5 7 4-4.5V18a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7.5Z"
+                      stroke="currentColor"
+                      strokeLinejoin="round"
+                      strokeWidth="1.45"
+                    />
+                    <path d="M8 14h8" stroke={selectedUserIsAdmin ? "#181A1F" : "currentColor"} strokeLinecap="round" strokeWidth="1.35" />
+                  </svg>
+                </button>
+                <button
                   className="btn !border-[#EF4444] !bg-[#2A1318] !text-[#EF4444] hover:!border-[#EF4444] hover:!bg-[#3a1a21]"
-                  disabled={loading || selectedUserModerationLocked}
+                  disabled={loading || selectedUserDeleteLocked}
                   onClick={() => {
-                    const confirmed = window.confirm("Delete this user permanently? This action cannot be undone.");
-                    if (!confirmed) {
-                      return;
-                    }
-                    void deleteUser(selectedUserRecord.id);
+                    openDeleteDialog("user", selectedUserRecord.id, selectedUserRecord.name);
                   }}
                   type="button"
                 >
@@ -1373,10 +1172,10 @@ export default function AdminClientPage() {
             </div>
 
             <div className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
-              <div className="min-w-0 rounded-lg border border-border/70 bg-[#161B22] p-3">
+              <div className="min-w-0 rounded-lg border border-border/70 bg-[#181A1F] p-3">
                 <div className="flex min-h-[300px] flex-col">
                   <div className="flex flex-col items-start text-left">
-                    <div className="h-24 w-24 overflow-hidden rounded-md border border-border/70 bg-[#0D1117]">
+                    <div className="h-24 w-24 overflow-hidden rounded-md border border-border/70 bg-[#0E0F12]">
                       {selectedUserRecord.profileImageUrl ? (
                         <img alt={selectedUserRecord.name} className="h-full w-full object-cover" src={selectedUserRecord.profileImageUrl} />
                       ) : (
@@ -1413,14 +1212,13 @@ export default function AdminClientPage() {
                 </div>
               </div>
 
-              <div className="min-w-0 rounded-lg border border-border/70 bg-[#161B22] p-3">
+              <div className="min-w-0 rounded-lg border border-border/70 bg-[#181A1F] p-3">
                 <p className="mb-2 text-xs uppercase tracking-[0.1em] text-muted">Moderation</p>
                 <div className="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-2">
                   <div className="min-w-0 space-y-2">
                     <p className="text-xs uppercase tracking-[0.08em] text-muted">Actions</p>
                     <button
                       className="btn w-full"
-                      disabled={loading}
                       onClick={() => openTimeoutDialog(selectedUserRecord.id)}
                       type="button"
                     >
@@ -1444,7 +1242,6 @@ export default function AdminClientPage() {
                     </button>
                     <button
                       className="btn w-full"
-                      disabled={loading}
                       onClick={() => openUsernameDialog(selectedUserRecord.id, selectedUserRecord.username)}
                       type="button"
                     >
@@ -1475,82 +1272,133 @@ export default function AdminClientPage() {
                   </div>
                 </div>
                 {selectedUserModerationLocked ? (
-                  <p className="mt-3 text-xs text-muted">Protected account. Moderation actions are disabled.</p>
+                  <p className="mt-3 text-xs text-muted">
+                    {selectedUserIsSuperuser
+                      ? "Superuser account is protected."
+                      : "Your own account cannot be moderated."}
+                  </p>
                 ) : null}
               </div>
             </div>
-
-            {timeoutDialog?.userId === selectedUserRecord.id ? (
-              <div
-                className="absolute inset-0 z-30 flex items-center justify-center bg-[#0D1117]/75 p-4"
-                onClick={() => setTimeoutDialog(null)}
-              >
-                <div
-                  className="w-full max-w-xs rounded-lg border border-border bg-[#161B22] p-4 shadow-panel"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <p className="text-sm font-semibold">Set Timeout</p>
-                  <p className="mt-1 text-xs text-muted">Select duration</p>
-                  <div className="mt-3 grid grid-cols-3 gap-2">
-                    {[3, 14, 30].map((daysOption) => {
-                      const days = daysOption as 3 | 14 | 30;
-                      const active = timeoutDialog.days === days;
-                      return (
-                        <button
-                          className={`btn ${active ? "!border-[#7C3AED] !bg-[#271848]" : ""}`}
-                          key={days}
-                          onClick={() => setTimeoutDialog((current) => (current ? { ...current, days } : current))}
-                          type="button"
-                        >
-                          {days}d
-                        </button>
-                      );
-                    })}
-                  </div>
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    <button className="btn" onClick={() => setTimeoutDialog(null)} type="button">
-                      Cancel
-                    </button>
-                    <button className="btn btn-primary" onClick={submitTimeoutDialog} type="button">
-                      Apply
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            {usernameDialog?.userId === selectedUserRecord.id ? (
-              <div
-                className="absolute inset-0 z-30 flex items-center justify-center bg-[#0D1117]/75 p-4"
-                onClick={() => setUsernameDialog(null)}
-              >
-                <div
-                  className="w-full max-w-sm rounded-lg border border-border bg-[#161B22] p-4 shadow-panel"
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <p className="text-sm font-semibold">Change Username</p>
-                  <p className="mt-1 text-xs text-muted">Only lowercase letters, numbers and underscore.</p>
-                  <input
-                    className="input mt-3"
-                    maxLength={24}
-                    onChange={(event) =>
-                      setUsernameDialog((current) => (current ? { ...current, value: event.target.value } : current))
-                    }
-                    placeholder="username"
-                    value={usernameDialog.value}
-                  />
-                  <div className="mt-3 grid grid-cols-2 gap-2">
-                    <button className="btn" onClick={() => setUsernameDialog(null)} type="button">
-                      Cancel
-                    </button>
-                    <button className="btn btn-primary" onClick={submitUsernameDialog} type="button">
-                      Save
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : null}
           </article>
+        </div>
+      ) : null}
+
+      {timeoutDialog ? (
+        <div className="dialog-overlay z-[300]" onClick={() => setTimeoutDialog(null)}>
+          <div
+            className="dialog-card w-full max-w-xs p-4"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="text-sm font-semibold">Set Timeout</p>
+            <p className="mt-1 text-xs text-muted">Select duration</p>
+            <div className="mt-3 grid grid-cols-3 gap-2">
+              {[3, 14, 30].map((daysOption) => {
+                const days = daysOption as 3 | 14 | 30;
+                const active = timeoutDialog.days === days;
+                return (
+                  <button
+                    className={`btn ${active ? "!border-[#7C6EFF] !bg-[#271848]" : ""}`}
+                    key={days}
+                    onClick={() => setTimeoutDialog((current) => (current ? { ...current, days } : current))}
+                    type="button"
+                  >
+                    {days}d
+                  </button>
+                );
+              })}
+            </div>
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button className="btn" onClick={() => setTimeoutDialog(null)} type="button">
+                Cancel
+              </button>
+              <button className="btn btn-primary" onClick={submitTimeoutDialog} type="button">
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {usernameDialog ? (
+        <div className="dialog-overlay z-[300]" onClick={() => setUsernameDialog(null)}>
+          <div
+            className="dialog-card w-full max-w-sm p-4"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="text-sm font-semibold">Change Username</p>
+            <p className="mt-1 text-xs text-muted">Only lowercase letters, numbers and underscore.</p>
+            <input
+              className="input mt-3"
+              maxLength={24}
+              onChange={(event) => setUsernameDialog((current) => (current ? { ...current, value: event.target.value } : current))}
+              placeholder="username"
+              value={usernameDialog.value}
+            />
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button className="btn" onClick={() => setUsernameDialog(null)} type="button">
+                Cancel
+              </button>
+              <button className="btn btn-primary" onClick={submitUsernameDialog} type="button">
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {adminToggleDialog ? (
+        <div className="dialog-overlay z-[320]" onClick={() => setAdminToggleDialog(null)}>
+          <div
+            className="dialog-card w-full max-w-sm p-4"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="text-sm font-semibold">Grant Admin</p>
+            <p className="mt-2 text-sm text-muted">
+              Give <span className="font-medium text-[#E5E7EB]">{adminToggleDialog.name}</span> admin permissions?
+            </p>
+            <p className="mt-1 text-xs text-muted">Admins can moderate users and manage tournaments like superusers.</p>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button className="btn" onClick={() => setAdminToggleDialog(null)} type="button">
+                Cancel
+              </button>
+              <button
+                className="btn !border-[#FACC15] !bg-[#3A2F08] !text-[#FACC15] hover:!border-[#FACC15] hover:!bg-[#4a3a0a]"
+                onClick={submitAdminToggleDialog}
+                type="button"
+              >
+                Grant
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {deleteDialog ? (
+        <div className="dialog-overlay z-[320]" onClick={() => setDeleteDialog(null)}>
+          <div
+            className="dialog-card w-full max-w-sm p-4"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="text-sm font-semibold">{deleteDialog.kind === "team" ? "Delete Team" : "Delete User"}</p>
+            <p className="mt-2 text-sm text-muted">
+              {deleteDialog.kind === "team"
+                ? `Delete "${deleteDialog.name}" permanently?`
+                : `Delete "${deleteDialog.name}" permanently? This action cannot be undone.`}
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button className="btn" onClick={() => setDeleteDialog(null)} type="button">
+                Cancel
+              </button>
+              <button
+                className="btn !border-[#EF4444] !bg-[#2A1318] !text-[#EF4444] hover:!border-[#EF4444] hover:!bg-[#3a1a21]"
+                onClick={submitDeleteDialog}
+                type="button"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
     </main>

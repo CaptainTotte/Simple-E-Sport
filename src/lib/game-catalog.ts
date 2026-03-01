@@ -60,14 +60,17 @@ export const GAME_CATALOG: GameSeedDefinition[] = [
   },
   {
     slug: "minecraft-creative",
-    name: "Minecraft (Creative Build Challenge)",
+    name: "Minecraft",
     imageUrl: "/games/minecraft-creative.svg",
     randomPoolAllowed: true,
     contextKind: ContextKind.THEME,
     contextLabelSingular: "Theme",
     contextLabelPlural: "Themes",
-    modes: [{ code: "5v5", label: "5v5", teamSize: 5 }],
-    contexts: ["Castle", "Space", "Steampunk", "Underwater City", "Fantasy Village", "Futuristic Base"]
+    modes: [
+      { code: "survival", label: "Survival", teamSize: 5 },
+      { code: "creative", label: "Creative", teamSize: 5 }
+    ],
+    contexts: []
   },
   {
     slug: "rocket-league",

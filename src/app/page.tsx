@@ -16,30 +16,55 @@ function statusLabel(status: TournamentStatus) {
 }
 
 export default async function HomePage() {
-  const tournaments = await prisma.tournament.findMany({
-    where: {
-      status: {
-        in: ACTIVE_STATUSES
-      },
-      ruleset: {
-        isNot: null
-      }
-    },
-    include: {
-      ruleset: {
-        include: {
-          game: true,
-          mode: true
+  const [tournaments, completedTournaments] = await Promise.all([
+    prisma.tournament.findMany({
+      where: {
+        status: {
+          in: ACTIVE_STATUSES
+        },
+        ruleset: {
+          isNot: null
         }
       },
-      _count: {
-        select: {
-          registrations: true
+      include: {
+        ruleset: {
+          include: {
+            game: true,
+            mode: true
+          }
+        },
+        _count: {
+          select: {
+            registrations: true
+          }
         }
-      }
-    },
-    orderBy: [{ status: "desc" }, { createdAt: "desc" }]
-  });
+      },
+      orderBy: [{ status: "desc" }, { createdAt: "desc" }]
+    }),
+    prisma.tournament.findMany({
+      where: {
+        status: TournamentStatus.COMPLETED,
+        ruleset: {
+          isNot: null
+        }
+      },
+      include: {
+        bracket: {
+          include: {
+            matches: {
+              orderBy: [{ round: "desc" }, { position: "asc" }],
+              take: 1,
+              include: {
+                winnerTeam: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: [{ updatedAt: "desc" }],
+      take: 12
+    })
+  ]);
 
   return (
     <main className="container py-8">
@@ -88,6 +113,37 @@ export default async function HomePage() {
                 </div>
               </article>
             ))}
+          </div>
+        )}
+      </section>
+
+      <section className="panel mt-6">
+        <p className="text-xs uppercase tracking-[0.2em] text-muted">Completed Tournaments</p>
+        <h2 className="mt-2 text-xl font-semibold">Recent Winners</h2>
+        {completedTournaments.length === 0 ? (
+          <p className="mt-3 text-sm text-muted">No completed tournaments yet.</p>
+        ) : (
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full min-w-[520px] table-fixed border-collapse text-left text-sm">
+              <thead>
+                <tr className="border-b border-border text-muted">
+                  <th className="w-[65%] py-2 pr-2">Tournament</th>
+                  <th className="w-[35%] py-2">Winner</th>
+                </tr>
+              </thead>
+              <tbody>
+                {completedTournaments.map((tournament) => (
+                  <tr className="border-b border-border/60" key={tournament.id}>
+                    <td className="py-2 pr-2">
+                      <Link className="truncate font-medium transition-colors hover:text-[#7C6EFF]" href={`/tournaments/${tournament.id}`}>
+                        {tournament.name}
+                      </Link>
+                    </td>
+                    <td className="py-2">{tournament.bracket?.matches[0]?.winnerTeam?.name ?? "No winner"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </section>

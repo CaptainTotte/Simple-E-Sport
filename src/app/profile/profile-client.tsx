@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { showToast } from "@/lib/toast";
 
@@ -76,6 +77,7 @@ export default function ProfileClient({
   tournamentWins,
   playedTournaments
 }: ProfileClientProps) {
+  const searchParams = useSearchParams();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
@@ -115,6 +117,17 @@ export default function ProfileClient({
   useEffect(() => {
     setProfileImageUrl(initialProfileImageUrl);
   }, [initialProfileImageUrl]);
+
+  useEffect(() => {
+    const tab = searchParams.get("tab");
+    if (tab === "team") {
+      setActiveView("team");
+      return;
+    }
+    if (tab === "general") {
+      setActiveView("general");
+    }
+  }, [searchParams]);
 
   async function submitPassword(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -346,14 +359,14 @@ export default function ProfileClient({
             <section className="panel">
               <h2 className="text-lg font-semibold">General</h2>
               <p className="mt-1 text-sm text-muted">General account settings</p>
-              <article className="mt-3 rounded-lg border border-border/70 bg-[#161B22] p-4">
+              <article className="mt-3 rounded-lg border border-border/70 bg-[#181A1F] p-4">
                 <div className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
                   <div className="flex flex-col items-start gap-1">
-                    <label className="group relative h-28 w-28 cursor-pointer overflow-hidden rounded-md border border-border/70 bg-[#1C212B]">
+                    <label className="group relative h-28 w-28 cursor-pointer overflow-hidden rounded-md border border-border/70 bg-[#202329]">
                       {profileImageUrl ? (
                         <img alt="Profile" className="h-full w-full object-cover" src={profileImageUrl} />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center bg-[#1C212B] text-xs font-semibold text-muted">
+                        <div className="flex h-full w-full items-center justify-center bg-[#202329] text-xs font-semibold text-muted">
                           No image
                         </div>
                       )}
@@ -375,7 +388,7 @@ export default function ProfileClient({
                       />
                     </label>
                   </div>
-                  <div className="min-w-0 rounded-lg border border-border/60 bg-[#161B22] p-3">
+                  <div className="min-w-0 rounded-lg border border-border/60 bg-[#181A1F] p-3">
                     <p className="text-xs uppercase tracking-[0.1em] text-muted">Personal</p>
                     <div className="mt-2 space-y-2 text-sm">
                       <div className="flex items-center justify-between border-b border-border/50 pb-2">
@@ -455,15 +468,15 @@ export default function ProfileClient({
               <p className="mt-1 text-sm text-muted">Each account can only belong to one team at a time.</p>
 
               {myTeam ? (
-                <article className="mt-3 rounded-lg border border-border/70 bg-[#161B22] p-4">
+                <article className="mt-3 rounded-lg border border-border/70 bg-[#181A1F] p-4">
                   <div className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
                     <div className="flex flex-col items-start gap-1">
                       {myTeam.myRole === "CAPTAIN" ? (
-                        <label className="group relative h-28 w-28 cursor-pointer overflow-hidden rounded-md border border-border/70 bg-[#1C212B]">
+                        <label className="group relative h-28 w-28 cursor-pointer overflow-hidden rounded-md border border-border/70 bg-[#202329]">
                           {myTeam.logoUrl ? (
                             <img alt="Team logo" className="h-full w-full object-cover" src={myTeam.logoUrl} />
                           ) : (
-                            <div className="flex h-full w-full items-center justify-center bg-[#1C212B] text-xs font-semibold text-muted">
+                            <div className="flex h-full w-full items-center justify-center bg-[#202329] text-xs font-semibold text-muted">
                               No logo
                             </div>
                           )}
@@ -485,18 +498,18 @@ export default function ProfileClient({
                           />
                         </label>
                       ) : (
-                        <div className="h-28 w-28 overflow-hidden rounded-md border border-border/70 bg-[#1C212B]">
+                        <div className="h-28 w-28 overflow-hidden rounded-md border border-border/70 bg-[#202329]">
                           {myTeam.logoUrl ? (
                             <img alt="Team logo" className="h-full w-full object-cover" src={myTeam.logoUrl} />
                           ) : (
-                            <div className="flex h-full w-full items-center justify-center bg-[#1C212B] text-xs font-semibold text-muted">
+                            <div className="flex h-full w-full items-center justify-center bg-[#202329] text-xs font-semibold text-muted">
                               No logo
                             </div>
                           )}
                         </div>
                       )}
                     </div>
-                    <div className="min-w-0 rounded-lg border border-border/60 bg-[#161B22] p-3">
+                    <div className="min-w-0 rounded-lg border border-border/60 bg-[#181A1F] p-3">
                       <p className="text-xs uppercase tracking-[0.1em] text-muted">Team</p>
                       <div className="mt-2 space-y-2 text-sm">
                         <div className="flex items-center justify-between border-b border-border/50 pb-2">
@@ -520,7 +533,7 @@ export default function ProfileClient({
                         {myTeam.members.map((member) => (
                           <li key={member.id}>
                             {member.username ? (
-                              <Link className="transition-colors hover:text-[#7C3AED]" href={`/players/${member.username}`}>
+                              <Link className="transition-colors hover:text-[#7C6EFF]" href={`/players/${member.username}`}>
                                 {member.name} (@{member.username})
                               </Link>
                             ) : (
@@ -588,7 +601,7 @@ export default function ProfileClient({
                 ) : (
                   <div className="mt-3 space-y-2">
                     {invitations.map((invitation) => (
-                      <article className="rounded-lg border border-border/70 bg-[#161B22] p-3" key={invitation.id}>
+                      <article className="rounded-lg border border-border/70 bg-[#181A1F] p-3" key={invitation.id}>
                         <p className="font-medium">
                           {invitation.team.name}
                           {invitation.team.tag ? ` [${invitation.team.tag}]` : ""}

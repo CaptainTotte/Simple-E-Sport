@@ -151,7 +151,7 @@ export default async function PlayerProfilePage({ params }: PageProps) {
       <section className="panel">
         <div className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)] lg:grid-cols-[220px_minmax(0,1fr)_minmax(0,1fr)]">
           <div className="w-44 max-w-full">
-            <div className="h-44 w-44 max-w-full overflow-hidden rounded-lg border border-border/70 bg-[#1C212B]">
+            <div className="h-44 w-44 max-w-full overflow-hidden rounded-lg border border-border/70 bg-[#202329]">
               {user.profileImageUrl ? (
                 <img alt={user.name} className="h-full w-full object-cover" src={user.profileImageUrl} />
               ) : (
@@ -160,7 +160,7 @@ export default async function PlayerProfilePage({ params }: PageProps) {
             </div>
           </div>
 
-          <div className="min-w-0 rounded-lg border border-border/60 bg-[#161B22] p-3">
+          <div className="min-w-0 rounded-lg border border-border/60 bg-[#181A1F] p-3">
             <p className="text-xs uppercase tracking-[0.1em] text-muted">Personal</p>
             <div className="mt-2 space-y-2 text-sm">
               <div className="flex items-center justify-between border-b border-border/50 pb-2">
@@ -191,11 +191,11 @@ export default async function PlayerProfilePage({ params }: PageProps) {
           </div>
 
           <div className="space-y-3">
-            <div className="rounded-lg border border-border/70 bg-[#161B22] p-3">
+            <div className="rounded-lg border border-border/70 bg-[#181A1F] p-3">
               <p className="text-xs uppercase tracking-[0.1em] text-muted">Current Team</p>
               {currentMembership ? (
                 <div className="mt-2 flex items-center gap-3">
-                  <div className="h-12 w-12 overflow-hidden rounded-md border border-border/70 bg-[#1C212B]">
+                  <div className="h-12 w-12 overflow-hidden rounded-md border border-border/70 bg-[#202329]">
                     {currentMembership.team.logoUrl ? (
                       <img alt={currentMembership.team.name} className="h-full w-full object-cover" src={currentMembership.team.logoUrl} />
                     ) : (
@@ -215,7 +215,7 @@ export default async function PlayerProfilePage({ params }: PageProps) {
               )}
             </div>
 
-            <div className="rounded-lg border border-border/70 bg-[#161B22] p-3">
+            <div className="rounded-lg border border-border/70 bg-[#181A1F] p-3">
               <p className="text-xs uppercase tracking-[0.1em] text-muted">Played Tournaments</p>
               <p className="mt-1 text-2xl font-semibold">{playedTournamentsCount}</p>
               <p className="mt-1 text-xs text-muted">Requires at least one approved result.</p>
@@ -232,7 +232,7 @@ export default async function PlayerProfilePage({ params }: PageProps) {
           ) : (
             <div className="mt-3 space-y-2">
               {playedTournaments.map((tournament) => (
-                <article className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-[#161B22] p-3" key={tournament.id}>
+                <article className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border/70 bg-[#181A1F] p-3" key={tournament.id}>
                   <div className="min-w-0">
                     <p className="truncate font-medium">{tournament.name}</p>
                     <p className="text-xs text-muted">

@@ -10,9 +10,14 @@ type MatchItem = {
   round: number;
   position: number;
   status: string;
+  participantATeamId: string | null;
+  participantBTeamId: string | null;
   participantATeamName: string | null;
   participantBTeamName: string | null;
+  winnerTeamId: string | null;
   winnerTeamName: string | null;
+  scoreA: number | null;
+  scoreB: number | null;
   latestReportId: string | null;
   latestReportStatus: string | null;
   latestProofUrl: string | null;
@@ -61,6 +66,57 @@ type TournamentTabsProps = {
   } | null;
 };
 
+type TournamentApiResponse = {
+  tournament: {
+    registrations: Array<{
+      status: string;
+      team: {
+        id: string;
+        name: string;
+        tag: string | null;
+        members: Array<{
+          id: string;
+          role: string;
+          displayName: string | null;
+          user: {
+            name: string;
+            username: string | null;
+          } | null;
+        }>;
+      };
+    }>;
+    bracket: {
+      matches: Array<{
+        id: string;
+        round: number;
+        position: number;
+        status: string;
+        participantATeam: {
+          id: string;
+          name: string;
+        } | null;
+        participantBTeam: {
+          id: string;
+          name: string;
+        } | null;
+        winnerTeam: {
+          id: string;
+          name: string;
+        } | null;
+        scoreA: number | null;
+        scoreB: number | null;
+        reports: Array<{
+          id: string;
+          status: string;
+          proofAssets: Array<{
+            publicUrl: string;
+          }>;
+        }>;
+      }>;
+    } | null;
+  };
+};
+
 function teamLabel(name: string | null | undefined) {
   return name ?? "TBD";
 }
@@ -73,11 +129,12 @@ const BRACKET_CONNECTOR_WIDTH = BRACKET_COLUMN_GAP;
 
 type TeamOutcome = "W" | "L" | "-";
 
-function outcomeForTeam(match: MatchItem, teamName: string): TeamOutcome {
-  if (!match.winnerTeamName || teamName === "TBD") {
+function outcomeForSlot(match: MatchItem, slot: "A" | "B"): TeamOutcome {
+  const teamId = slot === "A" ? match.participantATeamId : match.participantBTeamId;
+  if (!match.winnerTeamId || !teamId) {
     return "-";
   }
-  return match.winnerTeamName === teamName ? "W" : "L";
+  return match.winnerTeamId === teamId ? "W" : "L";
 }
 
 function participantRowClass(outcome: TeamOutcome) {
@@ -87,7 +144,7 @@ function participantRowClass(outcome: TeamOutcome) {
   if (outcome === "L") {
     return "bg-[linear-gradient(90deg,rgba(239,68,68,0.18),rgba(239,68,68,0.04))] text-white";
   }
-  return "text-[#E6EDF3]";
+  return "text-[#E5E7EB]";
 }
 
 function stripClass(outcome: TeamOutcome) {
@@ -97,7 +154,44 @@ function stripClass(outcome: TeamOutcome) {
   if (outcome === "L") {
     return "bg-[#ef4444]";
   }
-  return "bg-[#5865F2]";
+  return "bg-[#6D5DFC]";
+}
+
+function mapMatchesFromTournament(tournament: TournamentApiResponse["tournament"]): MatchItem[] {
+  return (
+    tournament.bracket?.matches.map((match) => ({
+      id: match.id,
+      round: match.round,
+      position: match.position,
+      status: match.status,
+      participantATeamId: match.participantATeam?.id ?? null,
+      participantBTeamId: match.participantBTeam?.id ?? null,
+      participantATeamName: match.participantATeam?.name ?? null,
+      participantBTeamName: match.participantBTeam?.name ?? null,
+      winnerTeamId: match.winnerTeam?.id ?? null,
+      winnerTeamName: match.winnerTeam?.name ?? null,
+      scoreA: match.scoreA ?? null,
+      scoreB: match.scoreB ?? null,
+      latestReportId: match.reports[0]?.id ?? null,
+      latestReportStatus: match.reports[0]?.status ?? null,
+      latestProofUrl: match.reports[0]?.proofAssets[0]?.publicUrl ?? null
+    })) ?? []
+  );
+}
+
+function mapTeamsFromTournament(tournament: TournamentApiResponse["tournament"]): TeamItem[] {
+  return tournament.registrations.map((registration) => ({
+    id: registration.team.id,
+    name: registration.team.name,
+    tag: registration.team.tag,
+    status: registration.status,
+    members: registration.team.members.map((member) => ({
+      id: member.id,
+      name: member.user?.name ?? member.displayName ?? "Unnamed",
+      username: member.user?.username ?? null,
+      role: member.role
+    }))
+  }));
 }
 
 export default function TournamentTabs({
@@ -113,45 +207,38 @@ export default function TournamentTabs({
   viewerTeam
 }: TournamentTabsProps) {
   const router = useRouter();
+  const isAdmin = viewerRole === "PLATFORM_ADMIN" || viewerRole === "TOURNAMENT_ADMIN";
   const [activeTab, setActiveTab] = useState<"bracket" | "rules" | "teams">("bracket");
   const [signupLoading, setSignupLoading] = useState(false);
+  const [liveMatches, setLiveMatches] = useState<MatchItem[]>(matches);
+  const [liveTeams, setLiveTeams] = useState<TeamItem[]>(teams);
+  const [liveRegisteredCount, setLiveRegisteredCount] = useState(registeredCount);
+  const [matchDialog, setMatchDialog] = useState<{
+    matchId: string;
+    status: string;
+    teamAId: string;
+    teamBId: string;
+    teamAName: string;
+    teamBName: string;
+    winnerTeamId: string;
+    scoreA: number;
+    scoreB: number;
+  } | null>(null);
+  const [resultSubmitting, setResultSubmitting] = useState(false);
   const bracketViewportRef = useRef<HTMLDivElement | null>(null);
   const [bracketViewportWidth, setBracketViewportWidth] = useState(0);
 
   const rounds = useMemo(() => {
     const grouped = new Map<number, MatchItem[]>();
-    for (const match of matches) {
+    for (const match of liveMatches) {
       const current = grouped.get(match.round) ?? [];
       current.push(match);
       grouped.set(match.round, current);
     }
     return [...grouped.entries()].sort((a, b) => a[0] - b[0]);
-  }, [matches]);
+  }, [liveMatches]);
 
-  const progressiveStartRound = useMemo(() => {
-    if (rounds.length === 0) {
-      return 1;
-    }
-    if (rounds.length === 1) {
-      return rounds[0][0];
-    }
-
-    let startRound = rounds[0][0];
-    for (let index = 0; index < rounds.length - 1; index += 1) {
-      const currentRoundMatches = rounds[index][1];
-      const allFinalized = currentRoundMatches.every((match) => match.status === "FINALIZED");
-      if (!allFinalized) {
-        break;
-      }
-      startRound = rounds[index + 1][0];
-    }
-    return startRound;
-  }, [rounds]);
-
-  const visibleRounds = useMemo(
-    () => rounds.filter(([roundNumber]) => roundNumber >= progressiveStartRound),
-    [rounds, progressiveStartRound]
-  );
+  const visibleRounds = rounds;
 
   const bracketLayout = useMemo(() => {
     const firstVisibleRoundMatches = visibleRounds[0]?.[1].length ?? 0;
@@ -192,6 +279,52 @@ export default function TournamentTabs({
   }, [bracketLayout.bracketWidth, bracketViewportWidth]);
 
   useEffect(() => {
+    setLiveMatches(matches);
+  }, [matches]);
+
+  useEffect(() => {
+    setLiveTeams(teams);
+  }, [teams]);
+
+  useEffect(() => {
+    setLiveRegisteredCount(registeredCount);
+  }, [registeredCount]);
+
+  useEffect(() => {
+    let disposed = false;
+    async function refreshLiveTournament() {
+      try {
+        const response = await fetch(`/api/tournaments/${tournamentId}`, {
+          cache: "no-store",
+          credentials: "same-origin"
+        });
+        if (!response.ok) {
+          return;
+        }
+        const payload = (await response.json()) as TournamentApiResponse;
+        if (disposed || !payload?.tournament) {
+          return;
+        }
+        setLiveMatches(mapMatchesFromTournament(payload.tournament));
+        setLiveTeams(mapTeamsFromTournament(payload.tournament));
+        setLiveRegisteredCount(payload.tournament.registrations.length);
+      } catch {
+        // Silent polling errors; user can continue interacting.
+      }
+    }
+
+    void refreshLiveTournament();
+    const intervalId = window.setInterval(() => {
+      void refreshLiveTournament();
+    }, 4000);
+
+    return () => {
+      disposed = true;
+      window.clearInterval(intervalId);
+    };
+  }, [tournamentId]);
+
+  useEffect(() => {
     const target = bracketViewportRef.current;
     if (!target || typeof ResizeObserver === "undefined") {
       return;
@@ -206,8 +339,6 @@ export default function TournamentTabs({
   }, []);
 
   const signupState = useMemo(() => {
-    const isAdmin = viewerRole === "PLATFORM_ADMIN" || viewerRole === "TOURNAMENT_ADMIN";
-
     if (!viewerRole) {
       return {
         enabled: false,
@@ -243,7 +374,7 @@ export default function TournamentTabs({
       };
     }
 
-    if (registeredCount >= teamLimit) {
+    if (liveRegisteredCount >= teamLimit) {
       return {
         enabled: false,
         reason: "Tournament is full."
@@ -274,7 +405,7 @@ export default function TournamentTabs({
       enabled: true,
       reason: ""
     };
-  }, [registeredCount, requiredTeamSize, teamLimit, tournamentStatus, viewerRole, viewerTeam]);
+  }, [isAdmin, liveRegisteredCount, requiredTeamSize, teamLimit, tournamentStatus, viewerRole, viewerTeam]);
 
   async function submitSignup() {
     if (!signupState.enabled) {
@@ -311,6 +442,66 @@ export default function TournamentTabs({
     }
   }
 
+  function openAdminMatchDialog(match: MatchItem) {
+    const canEdit = match.status === "READY" || match.status === "REPORTED" || match.status === "FINALIZED";
+    if (!isAdmin || !canEdit || !match.participantATeamId || !match.participantBTeamId) {
+      return;
+    }
+    setMatchDialog({
+      matchId: match.id,
+      status: match.status,
+      teamAId: match.participantATeamId,
+      teamBId: match.participantBTeamId,
+      teamAName: teamLabel(match.participantATeamName),
+      teamBName: teamLabel(match.participantBTeamName),
+      winnerTeamId: match.winnerTeamId ?? match.participantATeamId,
+      scoreA: match.scoreA ?? 2,
+      scoreB: match.scoreB ?? 0
+    });
+  }
+
+  async function submitAdminResult() {
+    if (!matchDialog) {
+      return;
+    }
+    setResultSubmitting(true);
+    try {
+      const response = await fetch(`/api/matches/${matchDialog.matchId}/result`, {
+        method: "PATCH",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          winnerTeamId: matchDialog.winnerTeamId,
+          scoreA: matchDialog.scoreA,
+          scoreB: matchDialog.scoreB
+        })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Could not submit result.");
+      }
+
+      const tournamentResponse = await fetch(`/api/tournaments/${tournamentId}`, {
+        cache: "no-store",
+        credentials: "same-origin"
+      });
+      if (tournamentResponse.ok) {
+        const tournamentPayload = (await tournamentResponse.json()) as TournamentApiResponse;
+        setLiveMatches(mapMatchesFromTournament(tournamentPayload.tournament));
+        setLiveTeams(mapTeamsFromTournament(tournamentPayload.tournament));
+        setLiveRegisteredCount(tournamentPayload.tournament.registrations.length);
+      }
+
+      showToast(matchDialog.status === "FINALIZED" ? "Result updated." : "Result submitted and bracket updated.", "success");
+      setMatchDialog(null);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Could not submit result.", "error");
+    } finally {
+      setResultSubmitting(false);
+    }
+  }
+
   return (
     <section className="panel mt-4">
       <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-border pb-3">
@@ -336,7 +527,7 @@ export default function TournamentTabs({
 
       {activeTab === "bracket" ? (
         <>
-          {matches.length === 0 ? (
+          {liveMatches.length === 0 ? (
             <p className="text-sm text-muted">Bracket is not generated yet.</p>
           ) : (
             <div className="py-1">
@@ -372,27 +563,36 @@ export default function TournamentTabs({
                               const top = offset + matchIndex * spacing;
                               const teamA = teamLabel(match.participantATeamName);
                               const teamB = teamLabel(match.participantBTeamName);
-                              const outcomeA = outcomeForTeam(match, teamA);
-                              const outcomeB = outcomeForTeam(match, teamB);
+                              const outcomeA = outcomeForSlot(match, "A");
+                              const outcomeB = outcomeForSlot(match, "B");
+                              const canAdminReport =
+                                isAdmin &&
+                                (match.status === "READY" || match.status === "REPORTED" || match.status === "FINALIZED") &&
+                                Boolean(match.participantATeamId) &&
+                                Boolean(match.participantBTeamId);
 
                               return (
                                 <article
-                                  className="absolute overflow-hidden rounded-md border border-[#2B3240] bg-[#161B22] shadow-[0_14px_28px_rgba(0,0,0,0.28)]"
+                                  className={`absolute overflow-hidden rounded-md border border-[#2A2F36] bg-[#181A1F] shadow-[0_14px_28px_rgba(0,0,0,0.28)] ${
+                                    canAdminReport ? "cursor-pointer transition-colors hover:border-[#6D5DFC] hover:bg-[#202329]" : ""
+                                  }`}
                                   key={match.id}
+                                  onClick={() => openAdminMatchDialog(match)}
                                   style={{ top, height: bracketLayout.cardHeight, width: bracketLayout.columnWidth }}
+                                  title={canAdminReport ? "Click to set or edit result" : undefined}
                                 >
                                   <div className={`absolute right-0 top-0 h-1/2 w-2 ${stripClass(outcomeA)}`} />
                                   <div className={`absolute right-0 bottom-0 h-1/2 w-2 ${stripClass(outcomeB)}`} />
 
                                   <div
-                                    className={`flex h-1/2 items-center justify-between border-b border-[#2B3240] px-3 text-sm ${participantRowClass(outcomeA)}`}
+                                    className={`flex h-1/2 items-center justify-between border-b border-[#2A2F36] px-3 text-sm ${participantRowClass(outcomeA)}`}
                                   >
                                     <span className="max-w-[220px] truncate font-semibold">{teamA}</span>
-                                    <span className="text-[11px] uppercase tracking-[0.08em] text-[#9AA4B2]">{outcomeA}</span>
+                                    <span className="text-[11px] uppercase tracking-[0.08em] text-[#A1A1AA]">{outcomeA}</span>
                                   </div>
                                   <div className={`flex h-1/2 items-center justify-between px-3 text-sm ${participantRowClass(outcomeB)}`}>
                                     <span className="max-w-[220px] truncate font-semibold">{teamB}</span>
-                                    <span className="text-[11px] uppercase tracking-[0.08em] text-[#9AA4B2]">{outcomeB}</span>
+                                    <span className="text-[11px] uppercase tracking-[0.08em] text-[#A1A1AA]">{outcomeB}</span>
                                   </div>
                                 </article>
                               );
@@ -418,11 +618,11 @@ export default function TournamentTabs({
                                       }}
                                       viewBox={`0 0 ${bracketLayout.connectorWidth} ${connectorHeight}`}
                                     >
-                                      <line stroke="#9AA4B2" strokeWidth="2" x1="0" x2={midX} y1="0" y2="0" />
-                                      <line stroke="#9AA4B2" strokeWidth="2" x1="0" x2={midX} y1={connectorHeight} y2={connectorHeight} />
-                                      <line stroke="#9AA4B2" strokeWidth="2" x1={midX} x2={midX} y1="0" y2={connectorHeight} />
+                                      <line stroke="#A1A1AA" strokeWidth="2" x1="0" x2={midX} y1="0" y2="0" />
+                                      <line stroke="#A1A1AA" strokeWidth="2" x1="0" x2={midX} y1={connectorHeight} y2={connectorHeight} />
+                                      <line stroke="#A1A1AA" strokeWidth="2" x1={midX} x2={midX} y1="0" y2={connectorHeight} />
                                       <line
-                                        stroke="#9AA4B2"
+                                        stroke="#A1A1AA"
                                         strokeWidth="2"
                                         x1={midX}
                                         x2={bracketLayout.connectorWidth}
@@ -451,22 +651,28 @@ export default function TournamentTabs({
             <p className="text-sm text-muted">Rules are not configured yet.</p>
           ) : (
             <div className="space-y-3">
-              <div className="rounded-lg border border-border/70 bg-[#161B22] p-4 text-sm">
+              <div className="rounded-lg border border-border/70 bg-[#181A1F] p-4 text-sm">
                 <p className="mb-2 text-xs uppercase tracking-[0.12em] text-muted">Regler</p>
-                <p className="whitespace-pre-line text-[#E6EDF3]">
+                <p className="whitespace-pre-line text-[#E5E7EB]">
                   {ruleset.rulesText?.trim() ? ruleset.rulesText : "Inga specifika regler har lagts till ännu."}
                 </p>
               </div>
-              <div className="rounded-lg border border-border/70 bg-[#161B22] p-4 text-sm">
+              <div className="rounded-lg border border-border/70 bg-[#181A1F] p-4 text-sm">
                 <p>Game: {ruleset.gameName}</p>
                 <p>Mode: {ruleset.modeLabel}</p>
                 <p>Lagstorlek: {ruleset.teamSize}</p>
                 <p>Turneringsplatser: {ruleset.teamLimit}</p>
-                <p>Pool strategy: {ruleset.poolStrategy}</p>
-                {ruleset.poolStrategy === "RANDOM" ? (
-                  <p>Random pool size: {ruleset.randomPoolSize ?? "-"}</p>
+                {ruleset.randomPoolSize === null && ruleset.poolLabels.length === 0 ? (
+                  <p>Pool: None</p>
                 ) : (
-                  <p>Pool: {ruleset.poolLabels.length > 0 ? ruleset.poolLabels.join(", ") : "No manual pool entries"}</p>
+                  <>
+                    <p>Pool strategy: {ruleset.poolStrategy}</p>
+                    {ruleset.poolStrategy === "RANDOM" ? (
+                      <p>Random pool size: {ruleset.randomPoolSize ?? "-"}</p>
+                    ) : (
+                      <p>Pool: {ruleset.poolLabels.length > 0 ? ruleset.poolLabels.join(", ") : "No manual pool entries"}</p>
+                    )}
+                  </>
                 )}
               </div>
             </div>
@@ -476,11 +682,11 @@ export default function TournamentTabs({
 
       {activeTab === "teams" ? (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {teams.length === 0 ? (
+          {liveTeams.length === 0 ? (
             <p className="text-sm text-muted">No registered teams yet.</p>
           ) : (
-            teams.map((team) => (
-              <article className="rounded-lg border border-border/70 bg-[#161B22] p-3" key={team.id}>
+            liveTeams.map((team) => (
+              <article className="rounded-lg border border-border/70 bg-[#181A1F] p-3" key={team.id}>
                 <h3 className="font-semibold">
                   {team.name} {team.tag ? <span className="text-muted">[{team.tag}]</span> : null}
                 </h3>
@@ -489,7 +695,7 @@ export default function TournamentTabs({
                   {team.members.map((member) => (
                     <li key={member.id}>
                       {member.username ? (
-                        <Link className="transition-colors hover:text-[#7C3AED]" href={`/players/${member.username}`}>
+                        <Link className="transition-colors hover:text-[#7C6EFF]" href={`/players/${member.username}`}>
                           {member.name}
                         </Link>
                       ) : (
@@ -502,6 +708,73 @@ export default function TournamentTabs({
               </article>
             ))
           )}
+        </div>
+      ) : null}
+
+      {matchDialog ? (
+        <div className="dialog-overlay z-[320]" onClick={() => setMatchDialog(null)}>
+          <article
+            className="dialog-card w-full max-w-md p-4"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.12em] text-muted">
+                  {matchDialog.status === "FINALIZED" ? "Edit Match Result" : "Report Match"}
+                </p>
+                <p className="text-sm font-semibold">
+                  {matchDialog.teamAName} vs {matchDialog.teamBName}
+                </p>
+              </div>
+              <button className="btn" onClick={() => setMatchDialog(null)} type="button">
+                Close
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  className={`btn w-full ${matchDialog.winnerTeamId === matchDialog.teamAId ? "!border-[#22c55e] !bg-[#163023]" : ""}`}
+                  onClick={() => setMatchDialog((current) => (current ? { ...current, winnerTeamId: current.teamAId } : current))}
+                  type="button"
+                >
+                  Winner: {matchDialog.teamAName}
+                </button>
+                <button
+                  className={`btn w-full ${matchDialog.winnerTeamId === matchDialog.teamBId ? "!border-[#22c55e] !bg-[#163023]" : ""}`}
+                  onClick={() => setMatchDialog((current) => (current ? { ...current, winnerTeamId: current.teamBId } : current))}
+                  type="button"
+                >
+                  Winner: {matchDialog.teamBName}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <input
+                  className="input"
+                  min={0}
+                  onChange={(event) =>
+                    setMatchDialog((current) => (current ? { ...current, scoreA: Number(event.target.value) || 0 } : current))
+                  }
+                  type="number"
+                  value={matchDialog.scoreA}
+                />
+                <input
+                  className="input"
+                  min={0}
+                  onChange={(event) =>
+                    setMatchDialog((current) => (current ? { ...current, scoreB: Number(event.target.value) || 0 } : current))
+                  }
+                  type="number"
+                  value={matchDialog.scoreB}
+                />
+              </div>
+
+              <button className="btn btn-primary w-full" disabled={resultSubmitting} onClick={() => void submitAdminResult()} type="button">
+                {resultSubmitting ? "Saving..." : matchDialog.status === "FINALIZED" ? "Update Result" : "Submit Result"}
+              </button>
+            </div>
+          </article>
         </div>
       ) : null}
     </section>

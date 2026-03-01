@@ -221,7 +221,7 @@ export function ReportMenu() {
       </button>
 
       {open ? (
-        <div className="absolute right-0 z-[120] mt-2 w-[440px] max-w-[92vw] rounded-md border border-border bg-[#161B22] p-3 shadow-panel">
+        <div className="absolute right-0 z-[120] mt-2 w-[440px] max-w-[92vw] rounded-md border border-border bg-[#181A1F] p-3 shadow-panel">
           <p className="text-sm font-semibold">Report Results</p>
 
           <div className="mt-2 grid gap-2">
@@ -392,7 +392,7 @@ export function ReportMenu() {
                   Submit Review
                 </button>
                 {selectedPendingReport ? (
-                  <div className="rounded border border-border/60 bg-[#1C212B] p-2 text-xs text-muted">
+                  <div className="rounded border border-border/60 bg-[#202329] p-2 text-xs text-muted">
                     <p>
                       {selectedPendingReport.tournamentName} - {selectedPendingReport.matchLabel}
                     </p>

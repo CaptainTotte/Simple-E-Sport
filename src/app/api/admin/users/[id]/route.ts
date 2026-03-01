@@ -16,8 +16,8 @@ function isAdminRole(role: GlobalRole) {
   return role === GlobalRole.PLATFORM_ADMIN || role === GlobalRole.TOURNAMENT_ADMIN;
 }
 
-function isPrivilegedUser(role: GlobalRole) {
-  return role === GlobalRole.PLATFORM_ADMIN || role === GlobalRole.TOURNAMENT_ADMIN;
+function isSuperuser(role: GlobalRole) {
+  return role === GlobalRole.PLATFORM_ADMIN;
 }
 
 function timeoutDate(days: 3 | 14 | 30): Date {
@@ -51,14 +51,14 @@ export async function PATCH(req: Request, ctx: RouteContext) {
     }
 
     const modifyingSelf = target.id === actor.id;
-    const protectedUser = isPrivilegedUser(target.globalRole);
+    const protectedUser = isSuperuser(target.globalRole);
 
     if (action.action === "set_timeout") {
       if (modifyingSelf) {
         return NextResponse.json({ error: "You cannot timeout yourself." }, { status: 409 });
       }
       if (protectedUser) {
-        return NextResponse.json({ error: "Cannot timeout admin users." }, { status: 409 });
+        return NextResponse.json({ error: "Cannot timeout superusers." }, { status: 409 });
       }
 
       const user = await prisma.user.update({
@@ -93,7 +93,7 @@ export async function PATCH(req: Request, ctx: RouteContext) {
         return NextResponse.json({ error: "You cannot ban yourself." }, { status: 409 });
       }
       if (protectedUser) {
-        return NextResponse.json({ error: "Cannot ban admin users." }, { status: 409 });
+        return NextResponse.json({ error: "Cannot ban superusers." }, { status: 409 });
       }
 
       const user = await prisma.user.update({
@@ -137,6 +137,42 @@ export async function PATCH(req: Request, ctx: RouteContext) {
         }
       });
       await deleteLocalUpload(previous);
+      return NextResponse.json({ user });
+    }
+
+    if (action.action === "set_admin") {
+      if (target.globalRole === GlobalRole.PLATFORM_ADMIN && !action.enabled) {
+        return NextResponse.json({ error: "Superusers cannot be demoted." }, { status: 409 });
+      }
+
+      let nextRole = target.globalRole;
+      if (action.enabled) {
+        if (target.globalRole !== GlobalRole.PLATFORM_ADMIN) {
+          nextRole = GlobalRole.TOURNAMENT_ADMIN;
+        }
+      } else if (target.globalRole === GlobalRole.TOURNAMENT_ADMIN) {
+        const captainMembership = await prisma.teamMember.findFirst({
+          where: {
+            userId,
+            role: TeamMemberRole.CAPTAIN
+          },
+          select: {
+            id: true
+          }
+        });
+        nextRole = captainMembership ? GlobalRole.TEAM_CAPTAIN : GlobalRole.PLAYER;
+      }
+
+      const user = await prisma.user.update({
+        where: { id: userId },
+        data: {
+          globalRole: nextRole
+        },
+        select: {
+          id: true,
+          globalRole: true
+        }
+      });
       return NextResponse.json({ user });
     }
 
@@ -190,8 +226,8 @@ export async function DELETE(req: Request, ctx: RouteContext) {
       return NextResponse.json({ error: "You cannot delete yourself." }, { status: 409 });
     }
 
-    if (isPrivilegedUser(target.globalRole)) {
-      return NextResponse.json({ error: "Cannot delete admin users." }, { status: 409 });
+    if (isSuperuser(target.globalRole)) {
+      return NextResponse.json({ error: "Cannot delete superusers." }, { status: 409 });
     }
 
     const previousAvatar = target.profileImageUrl;

@@ -101,6 +101,12 @@ export const reportMatchSchema = z.object({
     .default([])
 });
 
+export const adminMatchResultSchema = z.object({
+  winnerTeamId: z.string().min(1),
+  scoreA: z.number().int().nonnegative(),
+  scoreB: z.number().int().nonnegative()
+});
+
 export const approveReportSchema = z.object({
   approve: z.boolean(),
   decisionNote: z.string().max(1000).optional()
@@ -145,6 +151,10 @@ export const adminUserActionSchema = z.discriminatedUnion("action", [
   }),
   z.object({
     action: z.literal("remove_avatar")
+  }),
+  z.object({
+    action: z.literal("set_admin"),
+    enabled: z.boolean()
   })
 ]);
 

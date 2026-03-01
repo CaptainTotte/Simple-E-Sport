@@ -41,6 +41,304 @@ function normalizeScore(value: number | null | undefined): number | null {
   return value;
 }
 
+async function invalidateReportsForMatches(
+  tx: Tx,
+  matchIds: string[],
+  reviewerUserId: string,
+  decisionNote: string
+) {
+  if (matchIds.length === 0) {
+    return {
+      invalidatedCount: 0
+    };
+  }
+
+  const reports = await tx.matchReport.findMany({
+    where: {
+      matchId: {
+        in: matchIds
+      },
+      status: {
+        in: [ReportStatus.SUBMITTED, ReportStatus.APPROVED]
+      }
+    },
+    select: {
+      id: true
+    }
+  });
+
+  if (reports.length === 0) {
+    return {
+      invalidatedCount: 0
+    };
+  }
+
+  const reportIds = reports.map((report) => report.id);
+  const now = new Date();
+
+  await tx.matchReport.updateMany({
+    where: {
+      id: {
+        in: reportIds
+      }
+    },
+    data: {
+      status: ReportStatus.REJECTED,
+      reviewedById: reviewerUserId,
+      reviewedAt: now,
+      decisionNote
+    }
+  });
+
+  await tx.notification.updateMany({
+    where: {
+      matchReportId: {
+        in: reportIds
+      },
+      isRead: false
+    },
+    data: {
+      isRead: true,
+      readAt: now
+    }
+  });
+
+  return {
+    invalidatedCount: reportIds.length
+  };
+}
+
+export async function adminSetMatchResult(
+  tx: Tx,
+  params: {
+    actorUserId: string;
+    matchId: string;
+    winnerTeamId: string;
+    scoreA?: number | null;
+    scoreB?: number | null;
+  }
+) {
+  const existingMatch = await tx.match.findUnique({
+    where: {
+      id: params.matchId
+    },
+    include: {
+      bracket: {
+        select: {
+          tournamentId: true
+        }
+      }
+    }
+  });
+
+  if (!existingMatch) {
+    throw new Error("Match not found.");
+  }
+
+  if (
+    existingMatch.status !== MatchStatus.READY &&
+    existingMatch.status !== MatchStatus.REPORTED &&
+    existingMatch.status !== MatchStatus.FINALIZED
+  ) {
+    throw new Error("Only ready, reported or finalized matches can be edited.");
+  }
+
+  const validWinner =
+    params.winnerTeamId === existingMatch.participantATeamId ||
+    params.winnerTeamId === existingMatch.participantBTeamId;
+  if (!validWinner) {
+    throw new Error("Winner must be one of the match participants.");
+  }
+
+  const winnerChanged =
+    existingMatch.status === MatchStatus.FINALIZED &&
+    Boolean(existingMatch.winnerTeamId) &&
+    existingMatch.winnerTeamId !== params.winnerTeamId;
+
+  if (existingMatch.status === MatchStatus.FINALIZED && !winnerChanged) {
+    const updated = await tx.match.update({
+      where: { id: existingMatch.id },
+      data: {
+        scoreA: normalizeScore(params.scoreA),
+        scoreB: normalizeScore(params.scoreB),
+        winnerTeamId: params.winnerTeamId,
+        finalizedAt: new Date(),
+        status: MatchStatus.FINALIZED
+      }
+    });
+
+    if (!existingMatch.nextMatchId) {
+      await tx.tournament.update({
+        where: {
+          id: existingMatch.bracket.tournamentId
+        },
+        data: {
+          status: TournamentStatus.COMPLETED
+        }
+      });
+    }
+
+    return {
+      updatedMatch: updated,
+      resetMatchIds: [] as string[],
+      invalidatedReportCount: 0
+    };
+  }
+
+  if (!winnerChanged) {
+    const invalidation = await invalidateReportsForMatches(
+      tx,
+      [existingMatch.id],
+      params.actorUserId,
+      "Invalidated due to admin result correction."
+    );
+
+    const updated = await finalizeMatchAndAdvance(tx, {
+      matchId: existingMatch.id,
+      winnerTeamId: params.winnerTeamId,
+      scoreA: params.scoreA,
+      scoreB: params.scoreB,
+      approvedReportId: null
+    });
+
+    return {
+      updatedMatch: updated,
+      resetMatchIds: [] as string[],
+      invalidatedReportCount: invalidation.invalidatedCount
+    };
+  }
+
+  const allBracketMatches = await tx.match.findMany({
+    where: {
+      bracketId: existingMatch.bracketId
+    },
+    select: {
+      id: true,
+      round: true,
+      position: true,
+      nextMatchId: true,
+      winnerToSlot: true,
+      participantATeamId: true,
+      participantBTeamId: true,
+      winnerTeamId: true
+    }
+  });
+
+  const byId = new Map(allBracketMatches.map((match) => [match.id, { ...match }]));
+  const previousByNext = new Map<string, Array<(typeof allBracketMatches)[number]>>();
+  for (const match of allBracketMatches) {
+    if (!match.nextMatchId) {
+      continue;
+    }
+    const entries = previousByNext.get(match.nextMatchId) ?? [];
+    entries.push(match);
+    previousByNext.set(match.nextMatchId, entries);
+  }
+
+  const descendantIds: string[] = [];
+  const queue: string[] = existingMatch.nextMatchId ? [existingMatch.nextMatchId] : [];
+  const seen = new Set<string>();
+  while (queue.length > 0) {
+    const currentId = queue.shift();
+    if (!currentId || seen.has(currentId)) {
+      continue;
+    }
+    seen.add(currentId);
+    descendantIds.push(currentId);
+    const current = byId.get(currentId);
+    if (current?.nextMatchId) {
+      queue.push(current.nextMatchId);
+    }
+  }
+
+  const matchesToInvalidate = [existingMatch.id, ...descendantIds];
+  const invalidation = await invalidateReportsForMatches(
+    tx,
+    matchesToInvalidate,
+    params.actorUserId,
+    "Invalidated due to admin result correction."
+  );
+
+  const updatedCurrent = await tx.match.update({
+    where: {
+      id: existingMatch.id
+    },
+    data: {
+      status: MatchStatus.FINALIZED,
+      winnerTeamId: params.winnerTeamId,
+      scoreA: normalizeScore(params.scoreA),
+      scoreB: normalizeScore(params.scoreB),
+      finalizedAt: new Date(),
+      reportedAt: null,
+      approvedReportId: null
+    }
+  });
+
+  const currentNode = byId.get(existingMatch.id);
+  if (currentNode) {
+    currentNode.winnerTeamId = params.winnerTeamId;
+  }
+
+  const orderedDescendants = descendantIds
+    .map((id) => byId.get(id))
+    .filter((match): match is NonNullable<typeof match> => Boolean(match))
+    .sort((a, b) => {
+      if (a.round !== b.round) {
+        return a.round - b.round;
+      }
+      return a.position - b.position;
+    });
+
+  for (const match of orderedDescendants) {
+    const feeders = previousByNext.get(match.id) ?? [];
+    const feederA = feeders.find((entry) => entry.winnerToSlot === ParticipantSlot.A);
+    const feederB = feeders.find((entry) => entry.winnerToSlot === ParticipantSlot.B);
+    const participantATeamId = feederA ? (byId.get(feederA.id)?.winnerTeamId ?? null) : null;
+    const participantBTeamId = feederB ? (byId.get(feederB.id)?.winnerTeamId ?? null) : null;
+
+    await tx.match.update({
+      where: {
+        id: match.id
+      },
+      data: {
+        participantATeamId,
+        participantBTeamId,
+        status: participantATeamId && participantBTeamId ? MatchStatus.READY : MatchStatus.PENDING,
+        winnerTeamId: null,
+        finalizedAt: null,
+        reportedAt: null,
+        scoreA: null,
+        scoreB: null,
+        approvedReportId: null
+      }
+    });
+
+    const node = byId.get(match.id);
+    if (node) {
+      node.participantATeamId = participantATeamId;
+      node.participantBTeamId = participantBTeamId;
+      node.winnerTeamId = null;
+    }
+  }
+
+  if (descendantIds.length > 0) {
+    await tx.tournament.update({
+      where: {
+        id: existingMatch.bracket.tournamentId
+      },
+      data: {
+        status: TournamentStatus.LIVE
+      }
+    });
+  }
+
+  return {
+    updatedMatch: updatedCurrent,
+    resetMatchIds: descendantIds,
+    invalidatedReportCount: invalidation.invalidatedCount
+  };
+}
+
 export async function finalizeMatchAndAdvance(
   tx: Tx,
   params: {

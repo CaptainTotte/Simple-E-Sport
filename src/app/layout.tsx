@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { GlobalToast } from "@/components/global-toast";
 import { NotificationBell } from "@/components/notification-bell";
-import { ReportMenu } from "@/components/report-menu";
 import { UserMenu } from "@/components/user-menu";
 import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
@@ -21,7 +20,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="en">
       <body>
-        <header className="relative z-[80] border-b border-border/70 bg-[#0D1117]">
+        <header className="relative z-[80] border-b border-border/70 bg-[#0E0F12]">
           <div className="container flex flex-wrap items-center justify-between gap-3 py-3">
             <Link className="text-lg font-semibold tracking-wide" href="/">
               Simple E-Sport
@@ -32,7 +31,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               </Link>
               {user ? (
                 <>
-                  <ReportMenu />
                   <NotificationBell />
                   <UserMenu
                     displayName={user.name}

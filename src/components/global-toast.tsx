@@ -48,10 +48,10 @@ export function GlobalToast() {
 
   const variantClass =
     toast.variant === "success"
-      ? "border-[#22D3EE] bg-gradient-to-r from-[#5865F2] to-[#7C3AED] text-[#E6EDF3] shadow-[0_0_22px_rgba(88,101,242,0.5),0_0_0_1px_rgba(34,211,238,0.5)]"
+      ? "border-[#2DD4BF] bg-gradient-to-r from-[#6D5DFC] to-[#7C6EFF] text-[#E5E7EB] shadow-[0_0_22px_rgba(109, 93, 252, 0.5),0_0_0_1px_rgba(34,211,238,0.5)]"
       : toast.variant === "error"
-        ? "border-[#EF4444] bg-[#2A1318] text-[#E6EDF3] shadow-[0_0_14px_rgba(239,68,68,0.3)]"
-        : "border-border bg-[#1C212B] text-text shadow-panel";
+        ? "border-[#EF4444] bg-[#2A1318] text-[#E5E7EB] shadow-[0_0_14px_rgba(239,68,68,0.3)]"
+        : "border-border bg-[#202329] text-text shadow-panel";
 
   return (
     <div className="pointer-events-none fixed inset-0 z-[220] flex items-center justify-center p-4">

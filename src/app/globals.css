@@ -4,17 +4,17 @@
 
 :root {
   color-scheme: dark;
-  --bg: #0d1117;
-  --sidebar: #11151c;
-  --surface: #161b22;
-  --elevated: #1c212b;
-  --border: #2b3240;
-  --text-primary: #e6edf3;
-  --text-secondary: #9aa4b2;
-  --text-muted: #6b7280;
-  --accent-primary: #5865f2;
-  --accent-secondary: #7c3aed;
-  --accent-cyan: #22d3ee;
+  --bg: #0e0f12;
+  --sidebar: #111317;
+  --surface: #181a1f;
+  --elevated: #202329;
+  --border: #2a2f36;
+  --text-primary: #e5e7eb;
+  --text-secondary: #a1a1aa;
+  --text-muted: #71717a;
+  --accent-primary: #6d5dfc;
+  --accent-secondary: #7c6eff;
+  --accent-cyan: #2dd4bf;
   --success: #22c55e;
   --warning: #f59e0b;
   --danger: #ef4444;
@@ -63,19 +63,45 @@ a {
 
 .input {
   width: 100%;
-  background: var(--surface);
+  background: var(--elevated);
   border: 1px solid var(--border);
   color: var(--text-primary);
   border-radius: 10px;
   padding: 0.6rem 0.75rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.02);
   transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
 }
 
+.input::placeholder {
+  color: var(--text-secondary);
+}
+
 .input:focus {
-  outline: 2px solid rgba(124, 58, 237, 0.28);
+  outline: 2px solid rgba(109, 93, 252, 0.28);
   border-color: var(--accent-secondary);
-  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.18);
+  box-shadow: 0 0 0 3px rgba(109, 93, 252, 0.2);
   background: var(--elevated);
+}
+
+select.input {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 2.65rem;
+  background-color: var(--elevated);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none'%3E%3Cpath d='m6 9 6 6 6-6' stroke='%23A1A1AA' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 1rem center;
+  background-size: 14px 14px;
+}
+
+select.input::-ms-expand {
+  display: none;
+}
+
+select.input option {
+  background-color: #202329;
+  color: var(--text-primary);
 }
 
 .btn {
@@ -96,7 +122,7 @@ a {
 
 .btn:not(.btn-primary):hover {
   border-color: var(--accent-secondary);
-  background: #232834;
+  background: #262a31;
   transform: translateY(-1px);
   box-shadow: 0 10px 22px rgba(0, 0, 0, 0.35);
 }
@@ -110,15 +136,15 @@ a {
 }
 
 .btn-primary:hover {
-  background: #6773f4;
-  border-color: #6773f4;
-  box-shadow: 0 10px 24px rgba(88, 101, 242, 0.22);
+  background: #7c6eff;
+  border-color: #7c6eff;
+  box-shadow: 0 10px 24px rgba(109, 93, 252, 0.24);
   transform: translateY(-1px);
 }
 
 .btn-primary:active {
-  background: #4f5ad6;
-  border-color: #4f5ad6;
+  background: #5f51de;
+  border-color: #5f51de;
   transform: translateY(0);
 }
 
@@ -185,22 +211,41 @@ a {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  z-index: 120;
+  z-index: 260;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 1rem;
-  background: rgba(5, 8, 12, 0.72);
-  backdrop-filter: blur(3px);
+  background: rgba(7, 8, 10, 0.78);
+  backdrop-filter: blur(6px) saturate(120%);
 }
 
 .modal-card {
   max-height: 88dvh;
   overflow: auto;
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: linear-gradient(180deg, rgba(32, 35, 41, 0.98) 0%, rgba(24, 26, 31, 0.98) 100%);
+  border: 1px solid #2f3540;
   border-radius: 14px;
-  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.45);
+  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.58), inset 0 1px 0 rgba(229, 231, 235, 0.04);
+  animation: modal-zoom-in 0.22s ease-out;
+}
+
+.dialog-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(7, 8, 10, 0.78);
+  backdrop-filter: blur(6px) saturate(120%);
+}
+
+.dialog-card {
+  background: linear-gradient(180deg, rgba(32, 35, 41, 0.98) 0%, rgba(24, 26, 31, 0.98) 100%);
+  border: 1px solid #2f3540;
+  border-radius: 14px;
+  box-shadow: 0 24px 56px rgba(0, 0, 0, 0.58), inset 0 1px 0 rgba(229, 231, 235, 0.04);
   animation: modal-zoom-in 0.22s ease-out;
 }
 

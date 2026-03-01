@@ -140,7 +140,7 @@ export async function POST(req: Request, ctx: RouteContext) {
         type: NotificationType.TEAM_INVITE,
         title: "Team invitation",
         body: `${actor.name} invited you to ${team.name}${team.tag ? ` [${team.tag}]` : ""}.`,
-        actionUrl: "/profile",
+        actionUrl: "/profile?tab=team",
         teamInvitationId: created.id,
         metadata: {
           teamId: team.id

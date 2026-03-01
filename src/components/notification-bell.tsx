@@ -220,43 +220,43 @@ export function NotificationBell() {
   }
 
   return (
-    <div className="relative" ref={rootRef}>
+    <div className="relative z-[170]" ref={rootRef}>
       <button
-        className="btn relative inline-flex h-10 w-10 items-center justify-center !p-0 leading-none"
+        className="btn relative z-[1] inline-flex h-10 w-10 items-center justify-center !overflow-visible !p-0 leading-none"
         onClick={() => setOpen((value) => !value)}
         style={{ padding: 0, lineHeight: 0 }}
         type="button"
       >
-        <svg aria-hidden="true" className="h-[84%] w-[84%]" fill="none" viewBox="0 0 24 24">
+        <svg aria-hidden="true" className="h-[16px] w-[16px]" fill="none" viewBox="0 0 24 24">
           <path
             d="M15 17h5l-1.4-1.4A2 2 0 0 1 18 14.2V11a6 6 0 1 0-12 0v3.2a2 2 0 0 1-.6 1.4L4 17h5m6 0a3 3 0 1 1-6 0"
             stroke="currentColor"
             strokeLinecap="round"
             strokeLinejoin="round"
-            strokeWidth="1.7"
+            strokeWidth="1.45"
           />
         </svg>
         {unreadBadge ? (
-          <span className="absolute -right-1 -top-1 min-w-[18px] rounded-full bg-[#ef4444] px-1 text-center text-[10px] font-semibold leading-[18px] text-white">
+          <span className="pointer-events-none absolute -right-1 -top-1 z-[2] min-w-[18px] rounded-full bg-[#ef4444] px-1 text-center text-[10px] font-semibold leading-[18px] text-white">
             {unreadBadge}
           </span>
         ) : null}
       </button>
 
       {open ? (
-        <div className="absolute right-0 z-[130] mt-2 w-[380px] max-w-[92vw] rounded-md border border-border bg-[#161B22] p-2 shadow-panel">
+        <div className="absolute right-0 z-[130] mt-2 w-[380px] max-w-[92vw] rounded-md border border-border bg-[#181A1F] p-2 shadow-panel">
           <div className="mb-2 flex items-center justify-between border-b border-border/70 px-1 pb-2">
             <p className="text-sm font-semibold">Notifications</p>
             <div className="flex items-center gap-3">
               <button
-                className="text-xs text-[#7C3AED] hover:text-[#22D3EE]"
+                className="text-xs text-[#7C6EFF] hover:text-[#2DD4BF]"
                 disabled={submitting}
                 onClick={() => void markAllRead()}
                 type="button"
               >
                 Mark all read
               </button>
-              <button className="text-xs text-[#9AA4B2] hover:text-[#E6EDF3]" disabled={submitting} onClick={() => void clearNotifications()} type="button">
+              <button className="text-xs text-[#A1A1AA] hover:text-[#E5E7EB]" disabled={submitting} onClick={() => void clearNotifications()} type="button">
                 Clear
               </button>
             </div>
@@ -271,10 +271,11 @@ export function NotificationBell() {
               const isPendingInvite =
                 notification.type === "TEAM_INVITE" && notification.teamInvitation?.status === "PENDING";
               const isPendingReview = notification.type === "REPORT_PENDING_REVIEW" && Boolean(notification.matchReportId);
+              const openUrl = notification.type === "TEAM_INVITE" ? "/profile?tab=team" : notification.actionUrl;
 
               return (
                 <article
-                  className={`rounded border border-border/70 bg-[#161B22] p-2 ${notification.isRead ? "opacity-70" : ""}`}
+                  className={`rounded border border-border/70 bg-[#181A1F] p-2 ${notification.isRead ? "opacity-70" : ""}`}
                   key={notification.id}
                 >
                   <div className="flex items-start justify-between gap-2">
@@ -317,10 +318,10 @@ export function NotificationBell() {
                     </div>
                   ) : (
                     <div className="mt-2 flex items-center gap-2">
-                      {notification.actionUrl ? (
+                      {openUrl ? (
                         <Link
                           className="btn px-2 py-1 text-xs leading-tight"
-                          href={notification.actionUrl}
+                          href={openUrl}
                           onClick={() => {
                             void markRead(notification.id);
                             setOpen(false);
