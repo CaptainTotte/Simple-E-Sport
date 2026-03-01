@@ -1,6 +1,7 @@
 import {
   MatchStatus,
   NotificationType,
+  PoolStrategy,
   ParticipantSlot,
   RegistrationStatus,
   ReportStatus,
@@ -39,6 +40,17 @@ function normalizeScore(value: number | null | undefined): number | null {
     return null;
   }
   return value;
+}
+
+function shuffle<T>(values: T[]) {
+  const next = [...values];
+  for (let index = next.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    const current = next[index];
+    next[index] = next[swapIndex];
+    next[swapIndex] = current;
+  }
+  return next;
 }
 
 async function invalidateReportsForMatches(
@@ -670,6 +682,33 @@ export async function generateSingleEliminationBracket(tournamentId: string, act
     const roundCount = Math.log2(bracketSize);
     const matchCount = bracketSize - 1;
 
+    const manualPoolNames = tournament.ruleset.poolItems
+      .map((item) => item.contextItem?.name ?? item.customLabel)
+      .filter((item): item is string => Boolean(item));
+    const randomPoolNames =
+      tournament.ruleset.poolStrategy === PoolStrategy.RANDOM
+        ? (
+            await tx.gameContextItemDefinition.findMany({
+              where: {
+                gameId: tournament.ruleset.gameId,
+                isActive: true
+              },
+              select: {
+                name: true
+              }
+            })
+          ).map((item) => item.name)
+        : [];
+    const roundPoolCandidates = tournament.ruleset.poolStrategy === PoolStrategy.RANDOM ? randomPoolNames : manualPoolNames;
+    const shuffledRoundPool = shuffle([...new Set(roundPoolCandidates)]);
+    const roundPool =
+      shuffledRoundPool.length === 0
+        ? []
+        : Array.from({ length: roundCount }, (_, index) => ({
+            round: index + 1,
+            name: shuffledRoundPool[index % shuffledRoundPool.length]
+          }));
+
     const bracket = await tx.bracket.create({
       data: {
         tournamentId: tournament.id,
@@ -770,7 +809,8 @@ export async function generateSingleEliminationBracket(tournamentId: string, act
         contextItemId: item.contextItemId,
         name: item.contextItem?.name ?? item.customLabel,
         position: item.position
-      }))
+      })),
+      roundPool
     };
 
     await tx.tournamentRuleset.update({

@@ -20,6 +20,7 @@ type Game = {
   id: string;
   slug: string;
   name: string;
+  imageUrl?: string | null;
   randomPoolAllowed: boolean;
   contextKind: "MAP" | "ARENA" | "THEME";
   contextLabelSingular: string;
@@ -132,6 +133,10 @@ async function callApi<T>(url: string, init?: RequestInit): Promise<T> {
   return payload as T;
 }
 
+function gameIconSrc(game: Game) {
+  return `/games/icons/${game.slug}.svg`;
+}
+
 export default function AdminClientPage() {
   const [games, setGames] = useState<Game[]>([]);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
@@ -166,6 +171,7 @@ export default function AdminClientPage() {
   const selectedGame = useMemo(() => games.find((game) => game.id === rulesetGameId), [games, rulesetGameId]);
   const randomPoolAllowed = selectedGame?.randomPoolAllowed ?? true;
   const gameHasContextPool = (selectedGame?.contextItems.length ?? 0) > 0;
+  const roundCount = Math.log2(createTeamLimit);
   const selectedTeamRecord = useMemo(
     () => teams.find((team) => team.id === expandedTeamId) ?? null,
     [teams, expandedTeamId]
@@ -274,6 +280,10 @@ export default function AdminClientPage() {
   }, [selectedGame, rulesetModeId, poolStrategy]);
 
   useEffect(() => {
+    setManualContextItemIds((previous) => (previous.length > roundCount ? previous.slice(0, roundCount) : previous));
+  }, [roundCount]);
+
+  useEffect(() => {
     if (createRulesRef.current) {
       autoSizeRulesTextarea(createRulesRef.current);
     }
@@ -314,7 +324,16 @@ export default function AdminClientPage() {
   }
 
   function toggleManualPoolItem(id: string) {
-    setManualContextItemIds((current) => (current.includes(id) ? current.filter((value) => value !== id) : [...current, id]));
+    setManualContextItemIds((current) => {
+      if (current.includes(id)) {
+        return current.filter((value) => value !== id);
+      }
+      if (current.length >= roundCount) {
+        showToast(`You can select up to ${roundCount} ${selectedGame?.contextLabelPlural?.toLowerCase() ?? "pool items"} for this bracket.`, "error");
+        return current;
+      }
+      return [...current, id];
+    });
   }
 
   async function deleteTeam(teamId: string, teamName: string) {
@@ -543,7 +562,7 @@ export default function AdminClientPage() {
           {activeView === "create" ? (
             <article className="panel">
               <h2 className="text-lg font-semibold">Create Tournament</h2>
-                <div className="mt-3 grid gap-2">
+              <div className="mt-3 space-y-3">
                 <input
                   className="input"
                   maxLength={48}
@@ -561,61 +580,129 @@ export default function AdminClientPage() {
                   }}
                   placeholder="Rules"
                 />
-                <select
-                  className="input"
-                  value={String(createTeamLimit)}
-                  onChange={(event) => setCreateTeamLimit(Number(event.target.value) as 4 | 8 | 16)}
-                >
-                  <option value="4">4 Teams</option>
-                  <option value="8">8 Teams</option>
-                  <option value="16">16 Teams</option>
-                </select>
 
-                <select className="input" value={rulesetGameId} onChange={(event) => setRulesetGameId(event.target.value)}>
-                  <option value="">Select game</option>
-                  {games.map((game) => (
-                    <option key={game.id} value={game.id}>
-                      {game.name}
-                    </option>
-                  ))}
-                </select>
+                <div className="rounded-lg border border-border/80 bg-[#202329] p-3 shadow-[0_10px_24px_rgba(0,0,0,0.2)]">
+                  <div className="mb-2 flex items-center gap-2">
+                    <p className="text-xs uppercase tracking-[0.14em] text-muted">Teams</p>
+                    <div className="h-px flex-1 bg-border/70" />
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[4, 8, 16].map((limit) => (
+                      <button
+                        className={`btn w-full ${createTeamLimit === limit ? "btn-primary" : ""}`}
+                        key={limit}
+                        onClick={() => setCreateTeamLimit(limit as 4 | 8 | 16)}
+                        type="button"
+                      >
+                        {limit} Teams
+                      </button>
+                    ))}
+                  </div>
+                </div>
 
-                <select className="input" value={rulesetModeId} onChange={(event) => setRulesetModeId(event.target.value)}>
-                  <option value="">Select mode</option>
-                  {selectedGame?.modes.map((mode) => (
-                    <option key={mode.id} value={mode.id}>
-                      {mode.label}
-                    </option>
-                  ))}
-                </select>
+                <div className="rounded-lg border border-border/80 bg-[#202329] p-3 shadow-[0_10px_24px_rgba(0,0,0,0.2)]">
+                  <div className="mb-2 flex items-center gap-2">
+                    <p className="text-xs uppercase tracking-[0.14em] text-muted">Game</p>
+                    <div className="h-px flex-1 bg-border/70" />
+                  </div>
+                  <div className="overflow-x-auto pb-1">
+                    <div className="flex min-w-max gap-2">
+                      {games.map((game) => (
+                        <button
+                          aria-label={game.name}
+                          className={`btn relative h-14 w-14 shrink-0 overflow-hidden rounded-md !p-0 ${
+                            rulesetGameId === game.id ? "!border-[#7C6EFF] !bg-[#262b33]" : ""
+                          }`}
+                          key={game.id}
+                          onClick={() => setRulesetGameId(game.id)}
+                          title={game.name}
+                          type="button"
+                        >
+                          <img
+                            alt={game.name}
+                            className="h-full w-full bg-[#111317] object-contain p-1"
+                            src={gameIconSrc(game)}
+                          />
+                          {rulesetGameId === game.id ? <span className="pointer-events-none absolute inset-0 border border-[#7C6EFF]" /> : null}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-border/80 bg-[#202329] p-3 shadow-[0_10px_24px_rgba(0,0,0,0.2)]">
+                  <div className="mb-2 flex items-center gap-2">
+                    <p className="text-xs uppercase tracking-[0.14em] text-muted">Mode</p>
+                    <div className="h-px flex-1 bg-border/70" />
+                  </div>
+                  {selectedGame ? (
+                    <div className="flex flex-wrap gap-2">
+                      {selectedGame.modes.map((mode) => (
+                        <button
+                          className={`btn ${rulesetModeId === mode.id ? "btn-primary" : ""}`}
+                          key={mode.id}
+                          onClick={() => setRulesetModeId(mode.id)}
+                          type="button"
+                        >
+                          {mode.label}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted">Select a game to choose mode.</p>
+                  )}
+                </div>
 
                 {gameHasContextPool ? (
-                  <>
-                    <select className="input" value={poolStrategy} onChange={(event) => setPoolStrategy(event.target.value as "RANDOM" | "MANUAL")}>
-                      {randomPoolAllowed ? <option value="RANDOM">Random pool</option> : null}
-                      <option value="MANUAL">Manual pool</option>
-                    </select>
+                  <div className="rounded-lg border border-border/80 bg-[#202329] p-3 shadow-[0_10px_24px_rgba(0,0,0,0.2)]">
+                    <div className="mb-2 flex items-center gap-2">
+                      <p className="text-xs uppercase tracking-[0.14em] text-muted">Pool Strategy</p>
+                      <div className="h-px flex-1 bg-border/70" />
+                    </div>
+                    <div className="grid max-w-xs grid-cols-2 gap-2">
+                      {randomPoolAllowed ? (
+                        <button
+                          className={`btn w-full ${poolStrategy === "RANDOM" ? "btn-primary" : ""}`}
+                          onClick={() => setPoolStrategy("RANDOM")}
+                          type="button"
+                        >
+                          Random
+                        </button>
+                      ) : null}
+                      <button
+                        className={`btn w-full ${poolStrategy === "MANUAL" ? "btn-primary" : ""}`}
+                        onClick={() => setPoolStrategy("MANUAL")}
+                        type="button"
+                      >
+                        Manual
+                      </button>
+                    </div>
 
                     {!randomPoolAllowed ? (
-                      <p className="rounded-lg border border-border/70 bg-[#181A1F] p-3 text-xs text-muted">
+                      <p className="mt-2 rounded-lg border border-border/70 bg-[#181A1F] p-3 text-xs text-muted">
                         This game supports manual pool only.
                       </p>
                     ) : null}
 
                     {poolStrategy === "RANDOM" ? (
-                      <p className="rounded-lg border border-border/70 bg-[#181A1F] p-3 text-xs text-muted">
-                        Random pool size is set automatically based on tournament slots (4/8/16 teams).
+                      <p className="mt-2 rounded-lg border border-border/70 bg-[#181A1F] p-3 text-xs text-muted">
+                        {roundCount} round{roundCount > 1 ? "s" : ""} detected from {createTeamLimit} teams.
+                        Random mode will draw one {selectedGame?.contextLabelSingular.toLowerCase() ?? "map"} per round from all available {selectedGame?.contextLabelPlural.toLowerCase() ?? "pool items"}.
                       </p>
                     ) : (
-                      <div className="rounded-lg border border-border/70 bg-[#181A1F] p-3">
+                      <div className="mt-2 rounded-lg border border-border/70 bg-[#181A1F] p-3">
                         <p className="mb-2 text-xs uppercase tracking-[0.14em] text-muted">
                           {selectedGame?.contextLabelPlural ?? "Pool items"}
+                        </p>
+                        <p className="mb-2 text-xs text-muted">
+                          Select up to {roundCount} {selectedGame?.contextLabelPlural.toLowerCase() ?? "pool items"} ({roundCount} round{roundCount > 1 ? "s" : ""} for {createTeamLimit} teams).
                         </p>
                         <div className="grid gap-2 sm:grid-cols-2">
                           {selectedGame?.contextItems.map((contextItem) => (
                             <label className="flex items-center gap-2 text-sm" key={contextItem.id}>
                               <input
                                 checked={manualContextItemIds.includes(contextItem.id)}
+                                disabled={!manualContextItemIds.includes(contextItem.id) && manualContextItemIds.length >= roundCount}
                                 onChange={() => toggleManualPoolItem(contextItem.id)}
                                 type="checkbox"
                               />
@@ -623,49 +710,54 @@ export default function AdminClientPage() {
                             </label>
                           ))}
                         </div>
+                        <p className="mt-2 text-xs text-muted">
+                          Selected: {manualContextItemIds.length}/{roundCount}
+                        </p>
                       </div>
                     )}
-                  </>
+                  </div>
                 ) : selectedGame ? (
                   <p className="rounded-lg border border-border/70 bg-[#181A1F] p-3 text-xs text-muted">
                     This game has no map/arena pool.
                   </p>
                 ) : null}
               </div>
-              <button
-                className="btn btn-primary mt-3"
-                disabled={loading || !rulesetGameId || !rulesetModeId}
-                onClick={() =>
-                  runAction(async () => {
-                    const created = await callApi<{ tournament: { id: string } }>("/api/tournaments", {
-                      method: "POST",
-                      body: JSON.stringify({
-                        name: createName,
-                        description: createRules,
-                        teamLimit: createTeamLimit
-                      })
-                    });
-                    const resolvedPoolStrategy: "RANDOM" | "MANUAL" = gameHasContextPool ? poolStrategy : "RANDOM";
-                    const poolItems =
-                      resolvedPoolStrategy === "MANUAL" ? manualContextItemIds.map((contextItemId) => ({ contextItemId })) : [];
-                    await callApi(`/api/tournaments/${created.tournament.id}/ruleset`, {
-                      method: "POST",
-                      body: JSON.stringify({
-                        gameId: rulesetGameId,
-                        modeId: rulesetModeId,
-                        poolStrategy: resolvedPoolStrategy,
-                        poolItems
-                      })
-                    });
-                    setCreateName("");
-                    setCreateRules(DEFAULT_TOURNAMENT_RULES);
-                    showToast("Tournament created.", "success");
-                  })
-                }
-                type="button"
-              >
-                Create Tournament
-              </button>
+              <div className="mt-3 flex justify-end">
+                <button
+                  className="btn btn-primary"
+                  disabled={loading || !rulesetGameId || !rulesetModeId}
+                  onClick={() =>
+                    runAction(async () => {
+                      const created = await callApi<{ tournament: { id: string } }>("/api/tournaments", {
+                        method: "POST",
+                        body: JSON.stringify({
+                          name: createName,
+                          description: createRules,
+                          teamLimit: createTeamLimit
+                        })
+                      });
+                      const resolvedPoolStrategy: "RANDOM" | "MANUAL" = gameHasContextPool ? poolStrategy : "RANDOM";
+                      const poolItems =
+                        resolvedPoolStrategy === "MANUAL" ? manualContextItemIds.map((contextItemId) => ({ contextItemId })) : [];
+                      await callApi(`/api/tournaments/${created.tournament.id}/ruleset`, {
+                        method: "POST",
+                        body: JSON.stringify({
+                          gameId: rulesetGameId,
+                          modeId: rulesetModeId,
+                          poolStrategy: resolvedPoolStrategy,
+                          poolItems
+                        })
+                      });
+                      setCreateName("");
+                      setCreateRules(DEFAULT_TOURNAMENT_RULES);
+                      showToast("Tournament created.", "success");
+                    })
+                  }
+                  type="button"
+                >
+                  Create Tournament
+                </button>
+              </div>
             </article>
           ) : null}
 

@@ -46,6 +46,7 @@ type RulesetData = {
   poolStrategy: string;
   randomPoolSize: number | null;
   poolLabels: string[];
+  roundPool: string[];
 };
 
 type TournamentTabsProps = {
@@ -252,6 +253,20 @@ export default function TournamentTabs({
     }
     return [...grouped.entries()].sort((a, b) => a[0] - b[0]);
   }, [liveMatches]);
+
+  const displayRoundPool = useMemo(() => {
+    if (!ruleset) {
+      return [];
+    }
+    if (ruleset.roundPool.length > 0) {
+      return ruleset.roundPool;
+    }
+    if (ruleset.poolStrategy === "MANUAL" && ruleset.poolLabels.length > 0) {
+      const fallbackRoundCount = Math.log2(ruleset.teamLimit);
+      return Array.from({ length: fallbackRoundCount }, (_, index) => ruleset.poolLabels[index % ruleset.poolLabels.length]);
+    }
+    return [];
+  }, [ruleset]);
 
   const visibleRounds = rounds;
 
@@ -614,6 +629,25 @@ export default function TournamentTabs({
 
       {activeTab === "bracket" ? (
         <>
+          {ruleset ? (
+            <div className="mb-3 rounded-lg border border-border/80 bg-[#202329] p-3 shadow-[0_10px_24px_rgba(0,0,0,0.22)]">
+              <p className="text-xs uppercase tracking-[0.12em] text-muted">Round {ruleset.gameName} plan</p>
+              {displayRoundPool.length > 0 ? (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {displayRoundPool.map((label, index) => (
+                    <span
+                      className="rounded-md border border-border/80 bg-[#181A1F] px-2 py-1 text-xs"
+                      key={`${label}-${index}`}
+                    >
+                      R{index + 1}: {label}
+                    </span>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2 text-xs text-muted">Round map/arena picks are generated when the bracket is generated.</p>
+              )}
+            </div>
+          ) : null}
           {liveMatches.length === 0 ? (
             <p className="text-sm text-muted">Bracket is not generated yet.</p>
           ) : (
@@ -761,6 +795,7 @@ export default function TournamentTabs({
                     )}
                   </>
                 )}
+                {displayRoundPool.length > 0 ? <p>Rounds: {displayRoundPool.map((label, index) => `R${index + 1} ${label}`).join(", ")}</p> : null}
               </div>
             </div>
           )}

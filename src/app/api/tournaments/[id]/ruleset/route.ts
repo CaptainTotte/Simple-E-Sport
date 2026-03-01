@@ -13,14 +13,8 @@ type RouteContext = {
   };
 };
 
-function suggestedRandomPoolSize(teamLimit: number) {
-  if (teamLimit <= 4) {
-    return 3;
-  }
-  if (teamLimit <= 8) {
-    return 5;
-  }
-  return 7;
+function roundCountFromTeamLimit(teamLimit: number) {
+  return Math.log2(teamLimit);
 }
 
 export async function POST(req: Request, ctx: RouteContext) {
@@ -63,7 +57,15 @@ export async function POST(req: Request, ctx: RouteContext) {
       return NextResponse.json({ error: "Selected mode does not belong to selected game." }, { status: 400 });
     }
 
+    const roundCount = roundCountFromTeamLimit(tournament.teamLimit);
+
     if (body.poolStrategy === PoolStrategy.MANUAL && body.poolItems) {
+      if (body.poolItems.length > roundCount) {
+        return NextResponse.json(
+          { error: `Manual pool can include at most ${roundCount} items for ${tournament.teamLimit} teams.` },
+          { status: 400 }
+        );
+      }
       for (const item of body.poolItems) {
         if (!item.contextItemId && !item.customLabel) {
           return NextResponse.json(
@@ -92,8 +94,7 @@ export async function POST(req: Request, ctx: RouteContext) {
         }
       });
       if (availableContextCount > 0) {
-        const suggested = suggestedRandomPoolSize(tournament.teamLimit);
-        const preferred = body.randomPoolSize ?? suggested;
+        const preferred = body.randomPoolSize ?? roundCount;
         resolvedRandomPoolSize = Math.max(1, Math.min(preferred, availableContextCount));
       }
     }

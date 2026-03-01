@@ -11,6 +11,25 @@ type PageProps = {
   };
 };
 
+function roundPoolFromFrozenConfig(value: unknown): string[] {
+  if (!value || typeof value !== "object") {
+    return [];
+  }
+  const maybeRoundPool = (value as { roundPool?: unknown }).roundPool;
+  if (!Array.isArray(maybeRoundPool)) {
+    return [];
+  }
+  return maybeRoundPool
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") {
+        return null;
+      }
+      const name = (entry as { name?: unknown }).name;
+      return typeof name === "string" && name.trim().length > 0 ? name.trim() : null;
+    })
+    .filter((entry): entry is string => Boolean(entry));
+}
+
 export default async function TournamentPage({ params }: PageProps) {
   const currentUser = await getCurrentUser(prisma);
   const tournament = await prisma.tournament.findUnique({
@@ -124,14 +143,15 @@ export default async function TournamentPage({ params }: PageProps) {
         modeLabel: tournament.ruleset.mode.label,
         teamSize: tournament.ruleset.mode.teamSize,
         teamLimit: tournament.teamLimit,
-        rulesText: tournament.description,
-        poolStrategy: tournament.ruleset.poolStrategy,
-        randomPoolSize: tournament.ruleset.randomPoolSize,
-        poolLabels: tournament.ruleset.poolItems
-          .map((item) => item.contextItem?.name ?? item.customLabel)
-          .filter((item): item is string => Boolean(item))
-      }
-    : null;
+      rulesText: tournament.description,
+      poolStrategy: tournament.ruleset.poolStrategy,
+      randomPoolSize: tournament.ruleset.randomPoolSize,
+      poolLabels: tournament.ruleset.poolItems
+        .map((item) => item.contextItem?.name ?? item.customLabel)
+        .filter((item): item is string => Boolean(item)),
+      roundPool: roundPoolFromFrozenConfig(tournament.ruleset.frozenConfig)
+    }
+  : null;
 
   const teams = tournament.registrations.map((registration) => ({
     id: registration.team.id,
