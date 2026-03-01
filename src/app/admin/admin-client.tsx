@@ -141,8 +141,15 @@ async function callApi<T>(url: string, init?: RequestInit): Promise<T> {
   return payload as T;
 }
 
+const GAME_ICON_EXT: Record<string, string> = {
+  "counter-strike": "webp",
+  "league-of-legends": "webp",
+  "rocket-league": "webp",
+};
+
 function gameIconSrc(game: Game) {
-  return `/games/icons/${game.slug}.svg`;
+  const ext = GAME_ICON_EXT[game.slug] ?? "svg";
+  return `/games/icons/${game.slug}.${ext}`;
 }
 
 export default function AdminClientPage() {
@@ -680,12 +687,12 @@ export default function AdminClientPage() {
                     <p className="text-xs uppercase tracking-[0.14em] text-muted">Game</p>
                     <div className="h-px flex-1 bg-border/70" />
                   </div>
-                  <div className="overflow-x-auto pb-1">
+                  <div className="overflow-x-auto pt-px pb-1">
                     <div className="flex min-w-max gap-2">
                       {games.map((game) => (
                         <button
                           aria-label={game.name}
-                          className={`btn relative h-14 w-14 shrink-0 overflow-hidden rounded-md !p-0 ${
+                          className={`btn relative h-14 w-14 shrink-0 rounded-md !p-0 ${
                             rulesetGameId === game.id ? "!border-[#7C6EFF] !bg-[#262b33]" : ""
                           }`}
                           key={game.id}
@@ -693,11 +700,13 @@ export default function AdminClientPage() {
                           title={game.name}
                           type="button"
                         >
-                          <img
-                            alt={game.name}
-                            className="h-full w-full bg-[#111317] object-contain p-1"
-                            src={gameIconSrc(game)}
-                          />
+                          <div className="h-full w-full overflow-hidden rounded-md">
+                            <img
+                              alt={game.name}
+                              className="h-full w-full bg-[#111317] object-contain p-1"
+                              src={gameIconSrc(game)}
+                            />
+                          </div>
                           {rulesetGameId === game.id ? <span className="pointer-events-none absolute inset-0 border border-[#7C6EFF]" /> : null}
                         </button>
                       ))}

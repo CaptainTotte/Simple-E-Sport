@@ -1,9 +1,32 @@
-import Image from "next/image";
 import Link from "next/link";
 import { TournamentStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 
 const ACTIVE_STATUSES = [TournamentStatus.REGISTRATION_OPEN, TournamentStatus.LIVE];
+
+const GAME_GRADIENTS: Record<string, string> = {
+  "counter-strike": "linear-gradient(135deg, #0E0F12 0%, #1A2E45 100%)",
+  "league-of-legends": "linear-gradient(135deg, #0E0F12 0%, #2D1F00 100%)",
+  "overwatch": "linear-gradient(135deg, #0E0F12 0%, #1A1A35 100%)",
+  "minecraft-creative": "linear-gradient(135deg, #0E0F12 0%, #0D2210 100%)",
+  "rocket-league": "linear-gradient(135deg, #0E0F12 0%, #0D1E3A 100%)",
+  "valorant": "linear-gradient(135deg, #0E0F12 0%, #2D0A10 100%)",
+};
+
+const GAME_ICON_EXT: Record<string, string> = {
+  "counter-strike": "webp",
+  "league-of-legends": "webp",
+  "rocket-league": "webp",
+};
+
+function gameGradient(slug: string): string {
+  return GAME_GRADIENTS[slug] ?? "linear-gradient(135deg, #0E0F12 0%, #181A1F 100%)";
+}
+
+function gameIconSrc(slug: string): string {
+  const ext = GAME_ICON_EXT[slug] ?? "svg";
+  return `/games/icons/${slug}.${ext}`;
+}
 
 function statusLabel(status: TournamentStatus) {
   if (status === TournamentStatus.REGISTRATION_OPEN) {
@@ -89,12 +112,15 @@ export default async function HomePage() {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {tournaments.map((tournament) => (
               <article className="overflow-hidden panel p-0" key={tournament.id}>
-                <div className="relative h-40 w-full">
-                  <Image
-                    alt={tournament.ruleset?.game.name ?? "Game image"}
-                    className="h-full w-full object-cover"
-                    fill
-                    src={tournament.ruleset?.game.imageUrl ?? "/games/valorant.svg"}
+                <div
+                  className="relative flex h-40 w-full items-center justify-center overflow-hidden"
+                  style={{ background: gameGradient(tournament.ruleset?.game.slug ?? "") }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    alt={tournament.ruleset?.game.name ?? "Game icon"}
+                    className="h-24 w-24 object-contain opacity-80 drop-shadow-lg"
+                    src={gameIconSrc(tournament.ruleset?.game.slug ?? "valorant")}
                   />
                   <div className="absolute left-3 top-3 rounded-md bg-black/55 px-2 py-1 text-xs font-medium">
                     {statusLabel(tournament.status)}

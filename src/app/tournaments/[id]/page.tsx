@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import TournamentTabs from "@/app/tournaments/[id]/tournament-tabs";
@@ -10,6 +9,30 @@ type PageProps = {
     id: string;
   };
 };
+
+const GAME_GRADIENTS: Record<string, string> = {
+  "counter-strike": "linear-gradient(135deg, #0E0F12 0%, #1A2E45 100%)",
+  "league-of-legends": "linear-gradient(135deg, #0E0F12 0%, #2D1F00 100%)",
+  "overwatch": "linear-gradient(135deg, #0E0F12 0%, #1A1A35 100%)",
+  "minecraft-creative": "linear-gradient(135deg, #0E0F12 0%, #0D2210 100%)",
+  "rocket-league": "linear-gradient(135deg, #0E0F12 0%, #0D1E3A 100%)",
+  "valorant": "linear-gradient(135deg, #0E0F12 0%, #2D0A10 100%)",
+};
+
+const GAME_ICON_EXT: Record<string, string> = {
+  "counter-strike": "webp",
+  "league-of-legends": "webp",
+  "rocket-league": "webp",
+};
+
+function gameGradient(slug: string): string {
+  return GAME_GRADIENTS[slug] ?? "linear-gradient(135deg, #0E0F12 0%, #181A1F 100%)";
+}
+
+function gameIconSrc(slug: string): string {
+  const ext = GAME_ICON_EXT[slug] ?? "svg";
+  return `/games/icons/${slug}.${ext}`;
+}
 
 function roundPoolFromFrozenConfig(value: unknown): string[] {
   if (!value || typeof value !== "object") {
@@ -181,13 +204,19 @@ export default async function TournamentPage({ params }: PageProps) {
   return (
     <main className="container py-8">
       <header className="overflow-hidden panel p-0">
-        <div className="relative h-44">
-          <Image
-            alt={tournament.ruleset?.game.name ?? "Tournament"}
-            className="h-full w-full object-cover"
-            fill
-            src={tournament.ruleset?.game.imageUrl ?? "/games/valorant.svg"}
-          />
+        <div
+          className="relative h-44 overflow-hidden"
+          style={{ background: gameGradient(tournament.ruleset?.game.slug ?? "") }}
+        >
+          <div className="absolute inset-0 flex items-center justify-center">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              alt=""
+              aria-hidden="true"
+              className="h-32 w-32 object-contain opacity-25 drop-shadow-lg"
+              src={gameIconSrc(tournament.ruleset?.game.slug ?? "valorant")}
+            />
+          </div>
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
           <div className="absolute bottom-4 left-4">
             <p className="text-xs uppercase tracking-[0.2em] text-muted">Tournament</p>
