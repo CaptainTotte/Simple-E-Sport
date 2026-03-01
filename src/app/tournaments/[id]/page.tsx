@@ -137,12 +137,14 @@ export default async function TournamentPage({ params }: PageProps) {
     id: registration.team.id,
     name: registration.team.name,
     tag: registration.team.tag,
+    logoUrl: registration.team.logoUrl ?? null,
     status: registration.status,
     members: registration.team.members.map((member) => ({
       id: member.id,
       name: member.user?.name ?? member.displayName ?? "Unnamed",
       username: member.user?.username ?? null,
-      role: member.role
+      role: member.role,
+      profileImageUrl: member.user?.profileImageUrl ?? null
     }))
   }));
 

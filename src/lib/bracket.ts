@@ -339,6 +339,169 @@ export async function adminSetMatchResult(
   };
 }
 
+export async function adminClearMatchResult(
+  tx: Tx,
+  params: {
+    actorUserId: string;
+    matchId: string;
+  }
+) {
+  const existingMatch = await tx.match.findUnique({
+    where: {
+      id: params.matchId
+    },
+    include: {
+      bracket: {
+        select: {
+          tournamentId: true
+        }
+      }
+    }
+  });
+
+  if (!existingMatch) {
+    throw new Error("Match not found.");
+  }
+
+  if (
+    existingMatch.status !== MatchStatus.READY &&
+    existingMatch.status !== MatchStatus.REPORTED &&
+    existingMatch.status !== MatchStatus.FINALIZED
+  ) {
+    throw new Error("Only ready, reported or finalized matches can be reset.");
+  }
+
+  const allBracketMatches = await tx.match.findMany({
+    where: {
+      bracketId: existingMatch.bracketId
+    },
+    select: {
+      id: true,
+      round: true,
+      position: true,
+      nextMatchId: true,
+      winnerToSlot: true,
+      participantATeamId: true,
+      participantBTeamId: true,
+      winnerTeamId: true
+    }
+  });
+
+  const byId = new Map(allBracketMatches.map((match) => [match.id, { ...match }]));
+  const previousByNext = new Map<string, Array<(typeof allBracketMatches)[number]>>();
+  for (const match of allBracketMatches) {
+    if (!match.nextMatchId) {
+      continue;
+    }
+    const entries = previousByNext.get(match.nextMatchId) ?? [];
+    entries.push(match);
+    previousByNext.set(match.nextMatchId, entries);
+  }
+
+  const descendantIds: string[] = [];
+  const queue: string[] = existingMatch.nextMatchId ? [existingMatch.nextMatchId] : [];
+  const seen = new Set<string>();
+  while (queue.length > 0) {
+    const currentId = queue.shift();
+    if (!currentId || seen.has(currentId)) {
+      continue;
+    }
+    seen.add(currentId);
+    descendantIds.push(currentId);
+    const current = byId.get(currentId);
+    if (current?.nextMatchId) {
+      queue.push(current.nextMatchId);
+    }
+  }
+
+  const matchesToInvalidate = [existingMatch.id, ...descendantIds];
+  const invalidation = await invalidateReportsForMatches(
+    tx,
+    matchesToInvalidate,
+    params.actorUserId,
+    "Invalidated due to admin result removal."
+  );
+
+  const currentStatus =
+    existingMatch.participantATeamId && existingMatch.participantBTeamId ? MatchStatus.READY : MatchStatus.PENDING;
+  const updatedCurrent = await tx.match.update({
+    where: {
+      id: existingMatch.id
+    },
+    data: {
+      status: currentStatus,
+      winnerTeamId: null,
+      scoreA: null,
+      scoreB: null,
+      finalizedAt: null,
+      reportedAt: null,
+      approvedReportId: null
+    }
+  });
+
+  const currentNode = byId.get(existingMatch.id);
+  if (currentNode) {
+    currentNode.winnerTeamId = null;
+  }
+
+  const orderedDescendants = descendantIds
+    .map((id) => byId.get(id))
+    .filter((match): match is NonNullable<typeof match> => Boolean(match))
+    .sort((a, b) => {
+      if (a.round !== b.round) {
+        return a.round - b.round;
+      }
+      return a.position - b.position;
+    });
+
+  for (const match of orderedDescendants) {
+    const feeders = previousByNext.get(match.id) ?? [];
+    const feederA = feeders.find((entry) => entry.winnerToSlot === ParticipantSlot.A);
+    const feederB = feeders.find((entry) => entry.winnerToSlot === ParticipantSlot.B);
+    const participantATeamId = feederA ? (byId.get(feederA.id)?.winnerTeamId ?? null) : null;
+    const participantBTeamId = feederB ? (byId.get(feederB.id)?.winnerTeamId ?? null) : null;
+
+    await tx.match.update({
+      where: {
+        id: match.id
+      },
+      data: {
+        participantATeamId,
+        participantBTeamId,
+        status: participantATeamId && participantBTeamId ? MatchStatus.READY : MatchStatus.PENDING,
+        winnerTeamId: null,
+        finalizedAt: null,
+        reportedAt: null,
+        scoreA: null,
+        scoreB: null,
+        approvedReportId: null
+      }
+    });
+
+    const node = byId.get(match.id);
+    if (node) {
+      node.participantATeamId = participantATeamId;
+      node.participantBTeamId = participantBTeamId;
+      node.winnerTeamId = null;
+    }
+  }
+
+  await tx.tournament.update({
+    where: {
+      id: existingMatch.bracket.tournamentId
+    },
+    data: {
+      status: TournamentStatus.LIVE
+    }
+  });
+
+  return {
+    updatedMatch: updatedCurrent,
+    resetMatchIds: descendantIds,
+    invalidatedReportCount: invalidation.invalidatedCount
+  };
+}
+
 export async function finalizeMatchAndAdvance(
   tx: Tx,
   params: {

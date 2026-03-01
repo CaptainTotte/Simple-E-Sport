@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { showToast } from "@/lib/toast";
@@ -27,12 +26,14 @@ type TeamItem = {
   id: string;
   name: string;
   tag: string | null;
+  logoUrl: string | null;
   status: string;
   members: Array<{
     id: string;
     name: string;
     username: string | null;
     role: string;
+    profileImageUrl: string | null;
   }>;
 };
 
@@ -74,6 +75,7 @@ type TournamentApiResponse = {
         id: string;
         name: string;
         tag: string | null;
+        logoUrl: string | null;
         members: Array<{
           id: string;
           role: string;
@@ -81,6 +83,7 @@ type TournamentApiResponse = {
           user: {
             name: string;
             username: string | null;
+            profileImageUrl: string | null;
           } | null;
         }>;
       };
@@ -157,6 +160,13 @@ function stripClass(outcome: TeamOutcome) {
   return "bg-[#6D5DFC]";
 }
 
+function registrationStatusClass(status: string) {
+  if (status === "APPROVED") {
+    return "text-[#22C55E]";
+  }
+  return "text-muted";
+}
+
 function mapMatchesFromTournament(tournament: TournamentApiResponse["tournament"]): MatchItem[] {
   return (
     tournament.bracket?.matches.map((match) => ({
@@ -184,12 +194,14 @@ function mapTeamsFromTournament(tournament: TournamentApiResponse["tournament"])
     id: registration.team.id,
     name: registration.team.name,
     tag: registration.team.tag,
+    logoUrl: registration.team.logoUrl ?? null,
     status: registration.status,
     members: registration.team.members.map((member) => ({
       id: member.id,
       name: member.user?.name ?? member.displayName ?? "Unnamed",
       username: member.user?.username ?? null,
-      role: member.role
+      role: member.role,
+      profileImageUrl: member.user?.profileImageUrl ?? null
     }))
   }));
 }
@@ -216,6 +228,7 @@ export default function TournamentTabs({
   const [matchDialog, setMatchDialog] = useState<{
     matchId: string;
     status: string;
+    hasResult: boolean;
     teamAId: string;
     teamBId: string;
     teamAName: string;
@@ -224,7 +237,9 @@ export default function TournamentTabs({
     scoreA: number;
     scoreB: number;
   } | null>(null);
-  const [resultSubmitting, setResultSubmitting] = useState(false);
+  const [resultAction, setResultAction] = useState<"save" | "remove" | null>(null);
+  const [teamDialogTeamId, setTeamDialogTeamId] = useState<string | null>(null);
+  const [playerDialogTarget, setPlayerDialogTarget] = useState<{ teamId: string; memberId: string } | null>(null);
   const bracketViewportRef = useRef<HTMLDivElement | null>(null);
   const [bracketViewportWidth, setBracketViewportWidth] = useState(0);
 
@@ -407,6 +422,38 @@ export default function TournamentTabs({
     };
   }, [isAdmin, liveRegisteredCount, requiredTeamSize, teamLimit, tournamentStatus, viewerRole, viewerTeam]);
 
+  const selectedTeamDialog = useMemo(
+    () => (teamDialogTeamId ? liveTeams.find((team) => team.id === teamDialogTeamId) ?? null : null),
+    [liveTeams, teamDialogTeamId]
+  );
+
+  const selectedPlayerDialog = useMemo(() => {
+    if (!playerDialogTarget) {
+      return null;
+    }
+    const team = liveTeams.find((item) => item.id === playerDialogTarget.teamId);
+    if (!team) {
+      return null;
+    }
+    const member = team.members.find((item) => item.id === playerDialogTarget.memberId);
+    if (!member) {
+      return null;
+    }
+    return { team, member };
+  }, [liveTeams, playerDialogTarget]);
+
+  useEffect(() => {
+    if (teamDialogTeamId && !selectedTeamDialog) {
+      setTeamDialogTeamId(null);
+    }
+  }, [selectedTeamDialog, teamDialogTeamId]);
+
+  useEffect(() => {
+    if (playerDialogTarget && !selectedPlayerDialog) {
+      setPlayerDialogTarget(null);
+    }
+  }, [playerDialogTarget, selectedPlayerDialog]);
+
   async function submitSignup() {
     if (!signupState.enabled) {
       showToast(signupState.reason, "error");
@@ -450,6 +497,7 @@ export default function TournamentTabs({
     setMatchDialog({
       matchId: match.id,
       status: match.status,
+      hasResult: Boolean(match.winnerTeamId) || match.scoreA !== null || match.scoreB !== null || match.status === "FINALIZED",
       teamAId: match.participantATeamId,
       teamBId: match.participantBTeamId,
       teamAName: teamLabel(match.participantATeamName),
@@ -464,7 +512,7 @@ export default function TournamentTabs({
     if (!matchDialog) {
       return;
     }
-    setResultSubmitting(true);
+    setResultAction("save");
     try {
       const response = await fetch(`/api/matches/${matchDialog.matchId}/result`, {
         method: "PATCH",
@@ -498,7 +546,46 @@ export default function TournamentTabs({
     } catch (error) {
       showToast(error instanceof Error ? error.message : "Could not submit result.", "error");
     } finally {
-      setResultSubmitting(false);
+      setResultAction(null);
+    }
+  }
+
+  async function removeAdminResult() {
+    if (!matchDialog) {
+      return;
+    }
+    if (!matchDialog.hasResult) {
+      showToast("No result to remove.", "error");
+      return;
+    }
+
+    setResultAction("remove");
+    try {
+      const response = await fetch(`/api/matches/${matchDialog.matchId}/result`, {
+        method: "DELETE"
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Could not remove result.");
+      }
+
+      const tournamentResponse = await fetch(`/api/tournaments/${tournamentId}`, {
+        cache: "no-store",
+        credentials: "same-origin"
+      });
+      if (tournamentResponse.ok) {
+        const tournamentPayload = (await tournamentResponse.json()) as TournamentApiResponse;
+        setLiveMatches(mapMatchesFromTournament(tournamentPayload.tournament));
+        setLiveTeams(mapTeamsFromTournament(tournamentPayload.tournament));
+        setLiveRegisteredCount(tournamentPayload.tournament.registrations.length);
+      }
+
+      showToast("Result removed. Match reset.", "success");
+      setMatchDialog(null);
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Could not remove result.", "error");
+    } finally {
+      setResultAction(null);
     }
   }
 
@@ -651,13 +738,13 @@ export default function TournamentTabs({
             <p className="text-sm text-muted">Rules are not configured yet.</p>
           ) : (
             <div className="space-y-3">
-              <div className="rounded-lg border border-border/70 bg-[#181A1F] p-4 text-sm">
+              <div className="rounded-lg border border-border/80 bg-[#202329] p-4 text-sm shadow-[0_10px_24px_rgba(0,0,0,0.22)]">
                 <p className="mb-2 text-xs uppercase tracking-[0.12em] text-muted">Regler</p>
                 <p className="whitespace-pre-line text-[#E5E7EB]">
                   {ruleset.rulesText?.trim() ? ruleset.rulesText : "Inga specifika regler har lagts till ännu."}
                 </p>
               </div>
-              <div className="rounded-lg border border-border/70 bg-[#181A1F] p-4 text-sm">
+              <div className="rounded-lg border border-border/80 bg-[#202329] p-4 text-sm shadow-[0_10px_24px_rgba(0,0,0,0.22)]">
                 <p>Game: {ruleset.gameName}</p>
                 <p>Mode: {ruleset.modeLabel}</p>
                 <p>Lagstorlek: {ruleset.teamSize}</p>
@@ -686,21 +773,33 @@ export default function TournamentTabs({
             <p className="text-sm text-muted">No registered teams yet.</p>
           ) : (
             liveTeams.map((team) => (
-              <article className="rounded-lg border border-border/70 bg-[#181A1F] p-3" key={team.id}>
+              <article
+                className="group cursor-pointer rounded-lg border border-border/80 bg-[#202329] p-3 shadow-[0_10px_24px_rgba(0,0,0,0.2)] transition-colors hover:border-[#7C6EFF] hover:bg-[#262b33]"
+                key={team.id}
+                onClick={() => setTeamDialogTeamId(team.id)}
+                title="Open team card"
+              >
                 <h3 className="font-semibold">
                   {team.name} {team.tag ? <span className="text-muted">[{team.tag}]</span> : null}
                 </h3>
-                <p className="text-xs text-muted">Registration: {team.status}</p>
+                <p className="text-xs">
+                  <span className="text-muted">Registration: </span>
+                  <span className={registrationStatusClass(team.status)}>{team.status}</span>
+                </p>
                 <ul className="mt-2 space-y-1 text-sm">
                   {team.members.map((member) => (
                     <li key={member.id}>
-                      {member.username ? (
-                        <Link className="transition-colors hover:text-[#7C6EFF]" href={`/players/${member.username}`}>
-                          {member.name}
-                        </Link>
-                      ) : (
-                        member.name
-                      )}{" "}
+                      <button
+                        className="cursor-pointer rounded-sm text-left transition-colors hover:text-[#7C6EFF]"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setPlayerDialogTarget({ teamId: team.id, memberId: member.id });
+                        }}
+                        title="Open player card"
+                        type="button"
+                      >
+                        {member.name}
+                      </button>{" "}
                       <span className="text-xs text-muted">({member.role})</span>
                     </li>
                   ))}
@@ -770,9 +869,153 @@ export default function TournamentTabs({
                 />
               </div>
 
-              <button className="btn btn-primary w-full" disabled={resultSubmitting} onClick={() => void submitAdminResult()} type="button">
-                {resultSubmitting ? "Saving..." : matchDialog.status === "FINALIZED" ? "Update Result" : "Submit Result"}
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  className="btn w-full !border-[#EF4444] !bg-[#2A1318] !text-[#EF4444] hover:!border-[#EF4444] hover:!bg-[#3a1a21]"
+                  disabled={Boolean(resultAction) || !matchDialog.hasResult}
+                  onClick={() => void removeAdminResult()}
+                  type="button"
+                >
+                  {resultAction === "remove" ? "Removing..." : "Remove Result"}
+                </button>
+                <button
+                  className="btn btn-primary w-full"
+                  disabled={Boolean(resultAction)}
+                  onClick={() => void submitAdminResult()}
+                  type="button"
+                >
+                  {resultAction === "save" ? "Saving..." : matchDialog.status === "FINALIZED" ? "Update Result" : "Submit Result"}
+                </button>
+              </div>
+            </div>
+          </article>
+        </div>
+      ) : null}
+
+      {selectedTeamDialog ? (
+        <div className="modal-overlay z-[320]" onClick={() => setTeamDialogTeamId(null)}>
+          <article className="modal-card w-full max-w-3xl p-4" onClick={(event) => event.stopPropagation()}>
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.14em] text-muted">Team Card</p>
+                <h3 className="text-xl font-semibold">
+                  {selectedTeamDialog.name} {selectedTeamDialog.tag ? <span className="text-muted">[{selectedTeamDialog.tag}]</span> : null}
+                </h3>
+                <p className="text-sm">
+                  <span className="text-muted">Registration: </span>
+                  <span className={registrationStatusClass(selectedTeamDialog.status)}>{selectedTeamDialog.status}</span>
+                </p>
+              </div>
+              <button className="btn" onClick={() => setTeamDialogTeamId(null)} type="button">
+                Close
               </button>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
+              <div className="rounded-lg border border-border/70 bg-[#181A1F] p-3">
+                <div className="h-32 w-32 overflow-hidden rounded-md border border-border/70 bg-[#202329]">
+                  {selectedTeamDialog.logoUrl ? (
+                    <img alt={selectedTeamDialog.name} className="h-full w-full object-cover" src={selectedTeamDialog.logoUrl} />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-sm font-semibold text-muted">No logo</div>
+                  )}
+                </div>
+                <p className="mt-3 text-sm text-muted">Members: {selectedTeamDialog.members.length}</p>
+              </div>
+              <div className="rounded-lg border border-border/70 bg-[#181A1F] p-3">
+                <p className="text-xs uppercase tracking-[0.14em] text-muted">Members</p>
+                <div className="mt-2 space-y-2">
+                  {selectedTeamDialog.members.map((member) => (
+                    <button
+                      className="flex w-full items-center gap-3 rounded-md border border-border/70 bg-[#202329] p-2 text-left transition-colors hover:border-[#7C6EFF]"
+                      key={member.id}
+                      onClick={() => setPlayerDialogTarget({ teamId: selectedTeamDialog.id, memberId: member.id })}
+                      type="button"
+                    >
+                      <div className="h-10 w-10 overflow-hidden rounded-md border border-border/70 bg-[#181A1F]">
+                        {member.profileImageUrl ? (
+                          <img alt={member.name} className="h-full w-full object-cover" src={member.profileImageUrl} />
+                        ) : (
+                          <div className="flex h-full w-full items-center justify-center text-[10px] text-muted">No avatar</div>
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="truncate text-sm font-semibold">{member.name}</p>
+                        <p className="truncate text-xs text-muted">
+                          {member.username ? `@${member.username}` : "No username"} - {member.role}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
+      ) : null}
+
+      {selectedPlayerDialog ? (
+        <div className="modal-overlay z-[330]" onClick={() => setPlayerDialogTarget(null)}>
+          <article className="modal-card w-full max-w-2xl p-4" onClick={(event) => event.stopPropagation()}>
+            <div className="mb-4 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.14em] text-muted">Player Card</p>
+                <h3 className="text-xl font-semibold">{selectedPlayerDialog.member.name}</h3>
+                <p className="text-sm text-muted">
+                  {selectedPlayerDialog.member.username ? `@${selectedPlayerDialog.member.username}` : "No username"}
+                </p>
+              </div>
+              <button className="btn" onClick={() => setPlayerDialogTarget(null)} type="button">
+                Close
+              </button>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-[180px_minmax(0,1fr)]">
+              <div className="rounded-lg border border-border/70 bg-[#181A1F] p-3">
+                <div className="h-28 w-28 overflow-hidden rounded-md border border-border/70 bg-[#202329]">
+                  {selectedPlayerDialog.member.profileImageUrl ? (
+                    <img
+                      alt={selectedPlayerDialog.member.name}
+                      className="h-full w-full object-cover"
+                      src={selectedPlayerDialog.member.profileImageUrl}
+                    />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-muted">No avatar</div>
+                  )}
+                </div>
+              </div>
+              <div className="rounded-lg border border-border/70 bg-[#181A1F] p-3">
+                <p className="text-xs uppercase tracking-[0.14em] text-muted">Personal</p>
+                <div className="mt-2 space-y-2 text-sm">
+                  <div className="flex items-center justify-between gap-3 border-b border-border/70 pb-2">
+                    <span className="text-secondary">Display Name</span>
+                    <span className="font-medium">{selectedPlayerDialog.member.name}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 border-b border-border/70 pb-2">
+                    <span className="text-secondary">Username</span>
+                    <span className="font-medium">
+                      {selectedPlayerDialog.member.username ? `@${selectedPlayerDialog.member.username}` : "-"}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 border-b border-border/70 pb-2">
+                    <span className="text-secondary">Current Team</span>
+                    <span className="font-medium">
+                      {selectedPlayerDialog.team.name}
+                      {selectedPlayerDialog.team.tag ? ` [${selectedPlayerDialog.team.tag}]` : ""}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 border-b border-border/70 pb-2">
+                    <span className="text-secondary">Team Role</span>
+                    <span className="font-medium">{selectedPlayerDialog.member.role}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-secondary">Tournament Status</span>
+                    <span className={`font-medium ${registrationStatusClass(selectedPlayerDialog.team.status)}`}>
+                      {selectedPlayerDialog.team.status}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
           </article>
         </div>

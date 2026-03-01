@@ -359,7 +359,7 @@ export default function ProfileClient({
             <section className="panel">
               <h2 className="text-lg font-semibold">General</h2>
               <p className="mt-1 text-sm text-muted">General account settings</p>
-              <article className="mt-3 rounded-lg border border-border/70 bg-[#181A1F] p-4">
+              <article className="mt-3 rounded-lg border border-border/80 bg-[#202329] p-4 shadow-[0_10px_24px_rgba(0,0,0,0.22)]">
                 <div className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
                   <div className="flex flex-col items-start gap-1">
                     <label className="group relative h-28 w-28 cursor-pointer overflow-hidden rounded-md border border-border/70 bg-[#202329]">
@@ -468,7 +468,7 @@ export default function ProfileClient({
               <p className="mt-1 text-sm text-muted">Each account can only belong to one team at a time.</p>
 
               {myTeam ? (
-                <article className="mt-3 rounded-lg border border-border/70 bg-[#181A1F] p-4">
+                <article className="mt-3 rounded-lg border border-border/80 bg-[#202329] p-4 shadow-[0_10px_24px_rgba(0,0,0,0.22)]">
                   <div className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
                     <div className="flex flex-col items-start gap-1">
                       {myTeam.myRole === "CAPTAIN" ? (
@@ -601,7 +601,7 @@ export default function ProfileClient({
                 ) : (
                   <div className="mt-3 space-y-2">
                     {invitations.map((invitation) => (
-                      <article className="rounded-lg border border-border/70 bg-[#181A1F] p-3" key={invitation.id}>
+                      <article className="rounded-lg border border-border/80 bg-[#202329] p-3 shadow-[0_10px_24px_rgba(0,0,0,0.2)]" key={invitation.id}>
                         <p className="font-medium">
                           {invitation.team.name}
                           {invitation.team.tag ? ` [${invitation.team.tag}]` : ""}

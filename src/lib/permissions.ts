@@ -6,7 +6,7 @@ export function isPlatformAdmin(actor: RequestActor): boolean {
 }
 
 export async function requireTournamentAdmin(prisma: PrismaClient, actor: RequestActor, tournamentId: string) {
-  if (isPlatformAdmin(actor)) {
+  if (isPlatformAdmin(actor) || actor.role === GlobalRole.TOURNAMENT_ADMIN) {
     return;
   }
 
