@@ -70,7 +70,7 @@ export default async function HighscorePage() {
             </thead>
             <tbody>
               {rows.map((row, index) => (
-                <tr className="border-t border-border/60 bg-[#181A1F]" key={row.id}>
+                <tr className="border-t border-border/60 odd:bg-[#202329]/45 even:bg-[#181A1F]" key={row.id}>
                   <td className="px-3 py-2 text-muted">{index + 1}</td>
                   <td className="px-3 py-2">
                     {row.username ? (
@@ -107,4 +107,3 @@ export default async function HighscorePage() {
     </main>
   );
 }
-

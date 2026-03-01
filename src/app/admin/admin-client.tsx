@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { showToast } from "@/lib/toast";
 
 type GameMode = {
@@ -106,6 +106,17 @@ type AdminUserRecord = {
 
 type AdminView = "create" | "teams" | "users" | "tournaments" | "advanced";
 
+const DEFAULT_TOURNAMENT_RULES = [
+  "1. Fair play: Cheating, scripting, exploits, stream sniping, or any third-party advantage = instant disqualification and a lifetime ban from all future tournaments.",
+  "2. Sportsmanship: Harassment, hate speech, threats, and abusive behavior toward players/admins are prohibited.",
+  "3. Roster lock: Only registered players may participate. Unauthorized substitutes are not allowed.",
+  "4. Match start: Teams must be ready on time. No-show for 10 minutes may be ruled as a forfeit.",
+  "5. Result reporting: Match results must be reported immediately after the match ends.",
+  "6. Proof requirement: In case of disputes, screenshot/VOD evidence must be provided. Missing proof may result in a loss.",
+  "7. Admin authority: Admin decisions on disputes, penalties, and rule interpretation are final.",
+  "8. Rule updates: Tournament admins may update rules before bracket start when necessary."
+].join("\n");
+
 async function callApi<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, {
     ...init,
@@ -130,8 +141,9 @@ export default function AdminClientPage() {
   const [activeView, setActiveView] = useState<AdminView>("create");
 
   const [createName, setCreateName] = useState("");
-  const [createRules, setCreateRules] = useState("");
+  const [createRules, setCreateRules] = useState(DEFAULT_TOURNAMENT_RULES);
   const [createTeamLimit, setCreateTeamLimit] = useState<4 | 8 | 16>(8);
+  const createRulesRef = useRef<HTMLTextAreaElement | null>(null);
 
   const [rulesetGameId, setRulesetGameId] = useState("");
   const [rulesetModeId, setRulesetModeId] = useState("");
@@ -216,6 +228,13 @@ export default function AdminClientPage() {
       return searchable.includes(query);
     });
   }, [users, userQuery, userFilter]);
+
+  function autoSizeRulesTextarea(element: HTMLTextAreaElement) {
+    element.style.height = "auto";
+    const nextHeight = Math.max(260, element.scrollHeight);
+    element.style.height = `${nextHeight}px`;
+  }
+
   async function loadData() {
     const [gamesData, tournamentsData, teamsData, usersData] = await Promise.all([
       callApi<{ games: Game[] }>("/api/games"),
@@ -253,6 +272,12 @@ export default function AdminClientPage() {
     }
     setManualContextItemIds((previous) => previous.filter((id) => selectedGame.contextItems.some((item) => item.id === id)));
   }, [selectedGame, rulesetModeId, poolStrategy]);
+
+  useEffect(() => {
+    if (createRulesRef.current) {
+      autoSizeRulesTextarea(createRulesRef.current);
+    }
+  }, [createRules]);
 
   useEffect(() => {
     if (!expandedTeamId && !expandedUserId) {
@@ -527,9 +552,13 @@ export default function AdminClientPage() {
                   placeholder="Tournament name"
                 />
                 <textarea
-                  className="input min-h-24"
+                  className="input min-h-[260px] resize-none overflow-hidden"
+                  ref={createRulesRef}
                   value={createRules}
-                  onChange={(event) => setCreateRules(event.target.value)}
+                  onChange={(event) => {
+                    setCreateRules(event.target.value);
+                    autoSizeRulesTextarea(event.currentTarget);
+                  }}
                   placeholder="Rules"
                 />
                 <select
@@ -628,6 +657,8 @@ export default function AdminClientPage() {
                         poolItems
                       })
                     });
+                    setCreateName("");
+                    setCreateRules(DEFAULT_TOURNAMENT_RULES);
                     showToast("Tournament created.", "success");
                   })
                 }
@@ -714,7 +745,7 @@ export default function AdminClientPage() {
                     <tbody>
                       {teams.map((team) => (
                         <tr
-                          className="group cursor-pointer border-b border-border/60 transition-colors hover:bg-[#202329]/70"
+                          className="group cursor-pointer border-b border-border/60 odd:bg-[#202329]/45 even:bg-[#181A1F] transition-colors hover:bg-[#202329]/75"
                           key={team.id}
                           onClick={() => {
                             setExpandedTeamId(team.id);
@@ -806,7 +837,7 @@ export default function AdminClientPage() {
                     <tbody>
                       {filteredUsers.map((user) => (
                         <tr
-                          className="group cursor-pointer border-b border-border/60 transition-colors hover:bg-[#202329]/70"
+                          className="group cursor-pointer border-b border-border/60 odd:bg-[#202329]/45 even:bg-[#181A1F] transition-colors hover:bg-[#202329]/75"
                           key={user.id}
                           onClick={() => {
                             setExpandedUserId(user.id);
@@ -882,7 +913,7 @@ export default function AdminClientPage() {
                   <tbody>
                     {tournaments.map((tournament) => {
                       return (
-                      <tr className="border-b border-border/60" key={tournament.id}>
+                      <tr className="border-b border-border/60 odd:bg-[#202329]/45 even:bg-[#181A1F]" key={tournament.id}>
                         <td className="py-2 pr-2">
                           <span className="block cursor-help truncate" title={tournament.name}>
                             {tournament.name}
