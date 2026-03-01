@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { showToast } from "@/lib/toast";
 
 type NotificationItem = {
   id: string;
@@ -60,7 +61,6 @@ export function NotificationBell() {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
-  const [error, setError] = useState("");
   const [data, setData] = useState<NotificationsPayload>({
     unreadCount: 0,
     notifications: []
@@ -79,12 +79,11 @@ export function NotificationBell() {
 
   async function loadNotifications() {
     setLoading(true);
-    setError("");
     try {
       const payload = await callApi<NotificationsPayload>("/api/notifications");
       setData(payload);
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not load notifications.");
+      showToast(nextError instanceof Error ? nextError.message : "Could not load notifications.", "error");
     } finally {
       setLoading(false);
     }
@@ -133,14 +132,13 @@ export function NotificationBell() {
 
   async function markAllRead() {
     setSubmitting(true);
-    setError("");
     try {
       await callApi("/api/notifications/read-all", {
         method: "POST"
       });
       await loadNotifications();
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not mark notifications as read.");
+      showToast(nextError instanceof Error ? nextError.message : "Could not mark notifications as read.", "error");
     } finally {
       setSubmitting(false);
     }
@@ -148,7 +146,6 @@ export function NotificationBell() {
 
   async function clearNotifications() {
     setSubmitting(true);
-    setError("");
     try {
       await callApi("/api/notifications/clear", {
         method: "POST"
@@ -158,7 +155,7 @@ export function NotificationBell() {
         notifications: []
       });
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not clear notifications.");
+      showToast(nextError instanceof Error ? nextError.message : "Could not clear notifications.", "error");
     } finally {
       setSubmitting(false);
     }
@@ -181,7 +178,7 @@ export function NotificationBell() {
         )
       }));
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not update notification.");
+      showToast(nextError instanceof Error ? nextError.message : "Could not update notification.", "error");
     }
   }
 
@@ -190,7 +187,6 @@ export function NotificationBell() {
       return;
     }
     setSubmitting(true);
-    setError("");
     try {
       await callApi(`/api/team-invitations/${notification.teamInvitation.id}/respond`, {
         method: "POST",
@@ -199,7 +195,7 @@ export function NotificationBell() {
       await markRead(notification.id);
       await loadNotifications();
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not respond to invitation.");
+      showToast(nextError instanceof Error ? nextError.message : "Could not respond to invitation.", "error");
     } finally {
       setSubmitting(false);
     }
@@ -210,7 +206,6 @@ export function NotificationBell() {
       return;
     }
     setSubmitting(true);
-    setError("");
     try {
       await callApi(`/api/reports/${notification.matchReportId}/approve`, {
         method: "POST",
@@ -218,7 +213,7 @@ export function NotificationBell() {
       });
       await loadNotifications();
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : "Could not review result.");
+      showToast(nextError instanceof Error ? nextError.message : "Could not review result.", "error");
     } finally {
       setSubmitting(false);
     }
@@ -249,25 +244,23 @@ export function NotificationBell() {
       </button>
 
       {open ? (
-        <div className="absolute right-0 z-[130] mt-2 w-[380px] max-w-[92vw] rounded-md border border-border bg-[#0f1728] p-2 shadow-panel">
+        <div className="absolute right-0 z-[130] mt-2 w-[380px] max-w-[92vw] rounded-md border border-border bg-[#161B22] p-2 shadow-panel">
           <div className="mb-2 flex items-center justify-between border-b border-border/70 px-1 pb-2">
             <p className="text-sm font-semibold">Notifications</p>
             <div className="flex items-center gap-3">
               <button
-                className="text-xs text-[#6ed6ff] hover:text-[#9ae5ff]"
+                className="text-xs text-[#7C3AED] hover:text-[#22D3EE]"
                 disabled={submitting}
                 onClick={() => void markAllRead()}
                 type="button"
               >
                 Mark all read
               </button>
-              <button className="text-xs text-[#94a3c8] hover:text-[#d5deef]" disabled={submitting} onClick={() => void clearNotifications()} type="button">
+              <button className="text-xs text-[#9AA4B2] hover:text-[#E6EDF3]" disabled={submitting} onClick={() => void clearNotifications()} type="button">
                 Clear
               </button>
             </div>
           </div>
-
-          {error ? <p className="mb-2 rounded border border-border bg-surface px-2 py-1 text-xs text-danger">{error}</p> : null}
 
           {loading ? <p className="px-1 py-2 text-xs text-muted">Loading...</p> : null}
 
@@ -281,7 +274,7 @@ export function NotificationBell() {
 
               return (
                 <article
-                  className={`rounded border border-border/70 bg-[#111827] p-2 ${notification.isRead ? "opacity-70" : ""}`}
+                  className={`rounded border border-border/70 bg-[#161B22] p-2 ${notification.isRead ? "opacity-70" : ""}`}
                   key={notification.id}
                 >
                   <div className="flex items-start justify-between gap-2">

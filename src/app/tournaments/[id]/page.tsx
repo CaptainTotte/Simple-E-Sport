@@ -2,6 +2,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import TournamentTabs from "@/app/tournaments/[id]/tournament-tabs";
+import { getCurrentUser } from "@/lib/current-user";
 import { prisma } from "@/lib/prisma";
 
 type PageProps = {
@@ -11,6 +12,7 @@ type PageProps = {
 };
 
 export default async function TournamentPage({ params }: PageProps) {
+  const currentUser = await getCurrentUser(prisma);
   const tournament = await prisma.tournament.findUnique({
     where: { id: params.id },
     include: {
@@ -79,6 +81,24 @@ export default async function TournamentPage({ params }: PageProps) {
     notFound();
   }
 
+  const viewerMembership = currentUser
+    ? await prisma.teamMember.findFirst({
+        where: {
+          userId: currentUser.id
+        },
+        include: {
+          team: {
+            include: {
+              members: true
+            }
+          }
+        },
+        orderBy: {
+          createdAt: "asc"
+        }
+      })
+    : null;
+
   const matches =
     tournament.bracket?.matches.map((match) => ({
       id: match.id,
@@ -121,6 +141,16 @@ export default async function TournamentPage({ params }: PageProps) {
     }))
   }));
 
+  const viewerTeam = viewerMembership
+    ? {
+        id: viewerMembership.team.id,
+        name: viewerMembership.team.name,
+        memberCount: viewerMembership.team.members.length,
+        myRole: viewerMembership.role,
+        alreadyRegistered: tournament.registrations.some((registration) => registration.teamId === viewerMembership.team.id)
+      }
+    : null;
+
   return (
     <main className="container py-8">
       <header className="overflow-hidden panel p-0">
@@ -148,7 +178,18 @@ export default async function TournamentPage({ params }: PageProps) {
         </div>
       </header>
 
-      <TournamentTabs matches={matches} ruleset={ruleset} teams={teams} />
+      <TournamentTabs
+        matches={matches}
+        registeredCount={tournament._count.registrations}
+        requiredTeamSize={tournament.ruleset?.mode.teamSize ?? null}
+        ruleset={ruleset}
+        teamLimit={tournament.teamLimit}
+        teams={teams}
+        tournamentId={tournament.id}
+        tournamentStatus={tournament.status}
+        viewerRole={currentUser?.globalRole ?? null}
+        viewerTeam={viewerTeam}
+      />
     </main>
   );
 }

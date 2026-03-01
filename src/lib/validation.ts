@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 export const createTournamentSchema = z.object({
-  name: z.string().min(3).max(120),
+  name: z.string().min(3).max(48),
   description: z.string().max(1000).optional(),
   teamLimit: z.union([z.literal(4), z.literal(8), z.literal(16)]).default(8),
   startsAt: z.string().datetime().optional(),
@@ -120,6 +120,33 @@ export const loginSchema = z.object({
   username: z.string().min(1),
   password: z.string().min(1)
 });
+
+export const adminUserActionSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("set_timeout"),
+    days: z.union([z.literal(3), z.literal(14), z.literal(30)])
+  }),
+  z.object({
+    action: z.literal("clear_timeout")
+  }),
+  z.object({
+    action: z.literal("ban")
+  }),
+  z.object({
+    action: z.literal("unban")
+  }),
+  z.object({
+    action: z.literal("set_username"),
+    username: z
+      .string()
+      .min(3)
+      .max(24)
+      .regex(/^[a-zA-Z0-9_-]+$/, "Username can only include letters, numbers, _ and -")
+  }),
+  z.object({
+    action: z.literal("remove_avatar")
+  })
+]);
 
 export const changePasswordSchema = z.object({
   currentPassword: z.string().min(1),

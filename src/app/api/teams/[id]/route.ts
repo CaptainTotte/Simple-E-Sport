@@ -1,4 +1,4 @@
-import { GlobalRole, TournamentStatus } from "@prisma/client";
+import { GlobalRole, Prisma, TournamentStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { requireActor } from "@/lib/auth";
 import { writeAuditLog } from "@/lib/audit";
@@ -37,25 +37,27 @@ export async function DELETE(req: Request, ctx: RouteContext) {
       await requireTeamCaptainOrAdmin(prisma, actor, teamId);
     }
 
-    const lockedRegistration = await prisma.tournamentRegistration.findFirst({
-      where: {
-        teamId,
-        tournament: {
-          status: {
-            in: [TournamentStatus.LIVE, TournamentStatus.COMPLETED]
+    if (!isAdminRole(actor.role)) {
+      const lockedRegistration = await prisma.tournamentRegistration.findFirst({
+        where: {
+          teamId,
+          tournament: {
+            status: {
+              in: [TournamentStatus.LIVE, TournamentStatus.COMPLETED]
+            }
           }
+        },
+        select: {
+          id: true
         }
-      },
-      select: {
-        id: true
-      }
-    });
+      });
 
-    if (lockedRegistration) {
-      return NextResponse.json(
-        { error: "Cannot delete a team that is part of a live or completed tournament." },
-        { status: 409 }
-      );
+      if (lockedRegistration) {
+        return NextResponse.json(
+          { error: "Cannot delete a team that is part of a live or completed tournament." },
+          { status: 409 }
+        );
+      }
     }
 
     await prisma.$transaction(async (tx) => {
@@ -69,15 +71,44 @@ export async function DELETE(req: Request, ctx: RouteContext) {
         }
       });
 
-      await tx.team.delete({
-        where: {
-          id: team.id
+      try {
+        await tx.team.delete({
+          where: {
+            id: team.id
+          }
+        });
+      } catch (deleteError) {
+        if (!(deleteError instanceof Prisma.PrismaClientKnownRequestError) || deleteError.code !== "P2003") {
+          throw deleteError;
         }
-      });
+
+        if (!isAdminRole(actor.role)) {
+          throw deleteError;
+        }
+
+        // Admin fallback for legacy/test data where reports still reference the team.
+        await tx.matchReport.deleteMany({
+          where: {
+            OR: [{ submittingTeamId: team.id }, { claimedWinnerTeamId: team.id }]
+          }
+        });
+
+        await tx.team.delete({
+          where: {
+            id: team.id
+          }
+        });
+      }
     });
 
     return NextResponse.json({ ok: true });
   } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2003") {
+      return NextResponse.json(
+        { error: "Cannot delete team while it is referenced by historical match reports." },
+        { status: 409 }
+      );
+    }
     if (error instanceof Error && error.message === "Unauthorized") {
       return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }

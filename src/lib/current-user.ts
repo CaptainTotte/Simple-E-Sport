@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import type { PrismaClient } from "@prisma/client";
+import { isAccountBlocked } from "@/lib/account-status";
 import { readSessionPayloadFromToken, sessionCookieName } from "@/lib/session";
 
 export async function getCurrentUser(prisma: PrismaClient) {
@@ -10,7 +11,7 @@ export async function getCurrentUser(prisma: PrismaClient) {
     return null;
   }
 
-  return prisma.user.findUnique({
+  const user = await prisma.user.findUnique({
     where: {
       id: payload.userId
     },
@@ -19,7 +20,21 @@ export async function getCurrentUser(prisma: PrismaClient) {
       name: true,
       username: true,
       profileImageUrl: true,
-      globalRole: true
+      globalRole: true,
+      timeoutUntil: true,
+      bannedAt: true
     }
   });
+
+  if (!user || isAccountBlocked(user)) {
+    return null;
+  }
+
+  return {
+    id: user.id,
+    name: user.name,
+    username: user.username,
+    profileImageUrl: user.profileImageUrl,
+    globalRole: user.globalRole
+  };
 }

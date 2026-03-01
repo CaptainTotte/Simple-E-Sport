@@ -58,7 +58,7 @@ export default async function HighscorePage() {
 
         <div className="mt-4 overflow-x-auto rounded-lg border border-border/70">
           <table className="min-w-full text-sm">
-            <thead className="bg-[#121a2c] text-left text-xs uppercase tracking-[0.08em] text-muted">
+            <thead className="bg-[#1C212B] text-left text-xs uppercase tracking-[0.08em] text-muted">
               <tr>
                 <th className="px-3 py-2">#</th>
                 <th className="px-3 py-2">Player</th>
@@ -70,11 +70,11 @@ export default async function HighscorePage() {
             </thead>
             <tbody>
               {rows.map((row, index) => (
-                <tr className="border-t border-border/60 bg-[#0f1626]" key={row.id}>
+                <tr className="border-t border-border/60 bg-[#161B22]" key={row.id}>
                   <td className="px-3 py-2 text-muted">{index + 1}</td>
                   <td className="px-3 py-2">
                     {row.username ? (
-                      <Link className="font-medium transition-colors hover:text-[#6ed6ff]" href={`/players/${row.username}`}>
+                      <Link className="font-medium transition-colors hover:text-[#7C3AED]" href={`/players/${row.username}`}>
                         {row.name}
                         <span className="ml-1 text-xs text-muted">@{row.username}</span>
                       </Link>
@@ -99,7 +99,7 @@ export default async function HighscorePage() {
           </table>
         </div>
 
-        <div className="mt-4 rounded-lg border border-border/70 bg-[#141821] p-3 text-xs text-muted">
+        <div className="mt-4 rounded-lg border border-border/70 bg-[#161B22] p-3 text-xs text-muted">
           <p>Scoring rules:</p>
           <p className="mt-1">+10 per approved match win. Tournament winner bonus: 4-team +10, 8-team +20, 16-team +30.</p>
         </div>

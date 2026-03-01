@@ -1,4 +1,5 @@
 import type { GlobalRole, PrismaClient } from "@prisma/client";
+import { isAccountBlocked } from "@/lib/account-status";
 import { readSessionPayloadFromToken, readSessionTokenFromRequest } from "@/lib/session";
 
 export type RequestActor = {
@@ -21,11 +22,17 @@ export async function getActorFromRequest(prisma: PrismaClient, req: Request): P
     select: {
       id: true,
       name: true,
-      globalRole: true
+      globalRole: true,
+      timeoutUntil: true,
+      bannedAt: true
     }
   });
 
   if (!user) {
+    return null;
+  }
+
+  if (isAccountBlocked(user)) {
     return null;
   }
 

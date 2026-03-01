@@ -53,25 +53,25 @@ export function UserMenu({ displayName, profileTag, profileImageUrl, isAdmin }: 
             src={profileImageUrl}
           />
         ) : (
-          <div className="absolute inset-0 flex items-center justify-center bg-[#141c2c] text-sm font-semibold text-text">{initial}</div>
+          <div className="absolute inset-0 flex items-center justify-center bg-[#1C212B] text-sm font-semibold text-text">{initial}</div>
         )}
       </button>
       {open ? (
-        <div className="absolute right-0 z-[120] mt-2 w-44 rounded-md border border-border bg-[#0f1728] p-1 shadow-panel">
+        <div className="absolute right-0 z-[120] mt-2 w-44 rounded-md border border-border bg-[#161B22] p-1 shadow-panel">
           <div className="mb-1 rounded px-2 py-2">
             <p className="truncate text-sm font-semibold text-text">{displayName}</p>
             <p className="truncate text-xs text-muted">{profileTag}</p>
           </div>
           <div className="mb-1 border-t border-border/70" />
-          <Link className="block rounded px-2 py-1 text-sm hover:bg-[#1a2640]" href="/profile" onClick={() => setOpen(false)}>
+          <Link className="block rounded px-2 py-1 text-sm hover:bg-[#1C212B]" href="/profile" onClick={() => setOpen(false)}>
             Profile
           </Link>
           {isAdmin ? (
-            <Link className="mt-1 block rounded px-2 py-1 text-sm hover:bg-[#1a2640]" href="/admin" onClick={() => setOpen(false)}>
+            <Link className="mt-1 block rounded px-2 py-1 text-sm hover:bg-[#1C212B]" href="/admin" onClick={() => setOpen(false)}>
               Admin
             </Link>
           ) : null}
-          <SignOutButton className="mt-1 w-full rounded px-2 py-1 text-left text-sm hover:bg-[#1a2640]" />
+          <SignOutButton className="mt-1 w-full rounded px-2 py-1 text-left text-sm hover:bg-[#1C212B]" />
         </div>
       ) : null}
     </div>

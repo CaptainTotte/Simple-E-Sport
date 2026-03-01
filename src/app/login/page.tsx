@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
+import { showToast } from "@/lib/toast";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -10,12 +11,10 @@ export default function LoginPage() {
   const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("password");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
-    setError("");
 
     try {
       const response = await fetch("/api/auth/login", {
@@ -28,7 +27,7 @@ export default function LoginPage() {
 
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        setError(payload.error ?? "Login failed.");
+        showToast(payload.error ?? "Login failed.", "error");
         return;
       }
 
@@ -63,7 +62,6 @@ export default function LoginPage() {
             type="password"
             value={password}
           />
-          {error ? <p className="text-sm text-danger">{error}</p> : null}
           <button className="btn btn-primary w-full" disabled={loading} type="submit">
             {loading ? "Signing in..." : "Sign in"}
           </button>

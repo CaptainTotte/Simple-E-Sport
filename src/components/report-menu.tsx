@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import { showToast } from "@/lib/toast";
 
 type DashboardMatch = {
   id: string;
@@ -54,7 +55,6 @@ export function ReportMenu() {
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(false);
   const [proofUploading, setProofUploading] = useState(false);
-  const [feedback, setFeedback] = useState("");
 
   const [tournamentId, setTournamentId] = useState("");
   const [matchId, setMatchId] = useState("");
@@ -126,7 +126,7 @@ export function ReportMenu() {
     setProofUrl("");
     setReviewReportId("");
     setReviewDecision("");
-    void loadDashboard().catch((error) => setFeedback(error.message));
+    void loadDashboard().catch((error) => showToast(error.message, "error"));
   }, [open]);
 
   useEffect(() => {
@@ -182,12 +182,11 @@ export function ReportMenu() {
 
   async function runAction(action: () => Promise<void>) {
     setLoading(true);
-    setFeedback("");
     try {
       await action();
       await loadDashboard();
     } catch (error) {
-      setFeedback(error instanceof Error ? error.message : "Unexpected error.");
+      showToast(error instanceof Error ? error.message : "Unexpected error.", "error");
     } finally {
       setLoading(false);
     }
@@ -197,7 +196,6 @@ export function ReportMenu() {
     const formData = new FormData();
     formData.append("image", file);
     setProofUploading(true);
-    setFeedback("");
     try {
       const response = await fetch("/api/reports/proof", {
         method: "POST",
@@ -208,9 +206,9 @@ export function ReportMenu() {
         throw new Error(payload.error ?? "Could not upload proof image.");
       }
       setProofUrl(typeof payload.publicUrl === "string" ? payload.publicUrl : "");
-      setFeedback("Proof image uploaded.");
+      showToast("Proof image uploaded.", "success");
     } catch (error) {
-      setFeedback(error instanceof Error ? error.message : "Could not upload proof image.");
+      showToast(error instanceof Error ? error.message : "Could not upload proof image.", "error");
     } finally {
       setProofUploading(false);
     }
@@ -223,7 +221,7 @@ export function ReportMenu() {
       </button>
 
       {open ? (
-        <div className="absolute right-0 z-[120] mt-2 w-[440px] max-w-[92vw] rounded-md border border-border bg-[#0f1728] p-3 shadow-panel">
+        <div className="absolute right-0 z-[120] mt-2 w-[440px] max-w-[92vw] rounded-md border border-border bg-[#161B22] p-3 shadow-panel">
           <p className="text-sm font-semibold">Report Results</p>
 
           <div className="mt-2 grid gap-2">
@@ -315,7 +313,7 @@ export function ReportMenu() {
                 if (!winnerTeamId) missing.push("winner");
                 if (proofRequired && !proofUrl.trim()) missing.push("proof");
                 if (missing.length > 0) {
-                  setFeedback(`Missing: ${missing.join(", ")}.`);
+                  showToast(`Missing: ${missing.join(", ")}.`, "error");
                   return;
                 }
                 const proofsPayload = proofUrl.trim()
@@ -338,7 +336,7 @@ export function ReportMenu() {
                     })
                   });
                   setProofUrl("");
-                  setFeedback("Report submitted.");
+                  showToast("Report submitted.", "success");
                 });
               }}
               type="button"
@@ -386,7 +384,7 @@ export function ReportMenu() {
                           decisionNote
                         })
                       });
-                      setFeedback(`Report ${reviewDecision === "approve" ? "approved" : "rejected"}.`);
+                      showToast(`Report ${reviewDecision === "approve" ? "approved" : "rejected"}.`, "success");
                     })
                   }
                   type="button"
@@ -394,7 +392,7 @@ export function ReportMenu() {
                   Submit Review
                 </button>
                 {selectedPendingReport ? (
-                  <div className="rounded border border-border/60 bg-[#101828] p-2 text-xs text-muted">
+                  <div className="rounded border border-border/60 bg-[#1C212B] p-2 text-xs text-muted">
                     <p>
                       {selectedPendingReport.tournamentName} - {selectedPendingReport.matchLabel}
                     </p>
@@ -407,7 +405,6 @@ export function ReportMenu() {
               </div>
             </div>
           ) : null}
-          {feedback ? <p className="mt-3 rounded border border-border px-2 py-1 text-xs text-muted">{feedback}</p> : null}
         </div>
       ) : null}
     </div>

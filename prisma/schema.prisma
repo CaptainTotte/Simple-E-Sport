@@ -94,6 +94,8 @@ model User {
   name                  String
   profileImageUrl       String?
   globalRole            GlobalRole                 @default(PLAYER)
+  timeoutUntil          DateTime?
+  bannedAt              DateTime?
   createdAt             DateTime                   @default(now())
   updatedAt             DateTime                   @updatedAt
   memberships           TeamMember[]

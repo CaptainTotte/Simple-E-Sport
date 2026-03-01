@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { showToast } from "@/lib/toast";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -10,12 +11,10 @@ export default function RegisterPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLoading(true);
-    setError("");
 
     try {
       const response = await fetch("/api/auth/register", {
@@ -28,7 +27,7 @@ export default function RegisterPage() {
 
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) {
-        setError(payload.error ?? "Registration failed.");
+        showToast(payload.error ?? "Registration failed.", "error");
         return;
       }
 
@@ -68,7 +67,6 @@ export default function RegisterPage() {
             type="password"
             value={password}
           />
-          {error ? <p className="text-sm text-danger">{error}</p> : null}
           <button className="btn btn-primary w-full" disabled={loading} type="submit">
             {loading ? "Creating..." : "Create account"}
           </button>

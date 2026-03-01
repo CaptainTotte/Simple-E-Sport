@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
+import { GlobalToast } from "@/components/global-toast";
 import { NotificationBell } from "@/components/notification-bell";
 import { ReportMenu } from "@/components/report-menu";
 import { UserMenu } from "@/components/user-menu";
@@ -20,7 +21,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="en">
       <body>
-        <header className="relative z-[80] border-b border-border/70 bg-[#0b1220]/90 backdrop-blur">
+        <header className="relative z-[80] border-b border-border/70 bg-[#0D1117]">
           <div className="container flex flex-wrap items-center justify-between gap-3 py-3">
             <Link className="text-lg font-semibold tracking-wide" href="/">
               Simple E-Sport
@@ -53,6 +54,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             </nav>
           </div>
         </header>
+        <GlobalToast />
         {children}
       </body>
     </html>

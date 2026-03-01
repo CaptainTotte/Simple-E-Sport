@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { showToast } from "@/lib/toast";
 
 type MatchItem = {
   id: string;
@@ -44,6 +46,19 @@ type TournamentTabsProps = {
   matches: MatchItem[];
   ruleset: RulesetData | null;
   teams: TeamItem[];
+  tournamentId: string;
+  tournamentStatus: string;
+  requiredTeamSize: number | null;
+  registeredCount: number;
+  teamLimit: number;
+  viewerRole: string | null;
+  viewerTeam: {
+    id: string;
+    name: string;
+    memberCount: number;
+    myRole: string;
+    alreadyRegistered: boolean;
+  } | null;
 };
 
 function teamLabel(name: string | null | undefined) {
@@ -72,7 +87,7 @@ function participantRowClass(outcome: TeamOutcome) {
   if (outcome === "L") {
     return "bg-[linear-gradient(90deg,rgba(239,68,68,0.18),rgba(239,68,68,0.04))] text-white";
   }
-  return "text-[#d8deef]";
+  return "text-[#E6EDF3]";
 }
 
 function stripClass(outcome: TeamOutcome) {
@@ -82,11 +97,24 @@ function stripClass(outcome: TeamOutcome) {
   if (outcome === "L") {
     return "bg-[#ef4444]";
   }
-  return "bg-[#44d9ff]";
+  return "bg-[#5865F2]";
 }
 
-export default function TournamentTabs({ matches, ruleset, teams }: TournamentTabsProps) {
+export default function TournamentTabs({
+  matches,
+  ruleset,
+  teams,
+  tournamentId,
+  tournamentStatus,
+  requiredTeamSize,
+  registeredCount,
+  teamLimit,
+  viewerRole,
+  viewerTeam
+}: TournamentTabsProps) {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<"bracket" | "rules" | "teams">("bracket");
+  const [signupLoading, setSignupLoading] = useState(false);
   const bracketViewportRef = useRef<HTMLDivElement | null>(null);
   const [bracketViewportWidth, setBracketViewportWidth] = useState(0);
 
@@ -177,9 +205,115 @@ export default function TournamentTabs({ matches, ruleset, teams }: TournamentTa
     return () => observer.disconnect();
   }, []);
 
+  const signupState = useMemo(() => {
+    const isAdmin = viewerRole === "PLATFORM_ADMIN" || viewerRole === "TOURNAMENT_ADMIN";
+
+    if (!viewerRole) {
+      return {
+        enabled: false,
+        reason: "Log in to sign up."
+      };
+    }
+
+    if (tournamentStatus !== "REGISTRATION_OPEN") {
+      return {
+        enabled: false,
+        reason: "Registration is closed."
+      };
+    }
+
+    if (!requiredTeamSize) {
+      return {
+        enabled: false,
+        reason: "Tournament mode is not configured."
+      };
+    }
+
+    if (!viewerTeam) {
+      return {
+        enabled: false,
+        reason: "Du behöver ett team."
+      };
+    }
+
+    if (viewerTeam.alreadyRegistered) {
+      return {
+        enabled: false,
+        reason: "Your team is already registered."
+      };
+    }
+
+    if (registeredCount >= teamLimit) {
+      return {
+        enabled: false,
+        reason: "Tournament is full."
+      };
+    }
+
+    if (viewerTeam.memberCount !== requiredTeamSize) {
+      if (viewerTeam.memberCount < requiredTeamSize) {
+        return {
+          enabled: false,
+          reason: "Ditt team har inte tillräckligt med spelare för denna turnering."
+        };
+      }
+      return {
+        enabled: false,
+        reason: `Ditt team måste ha exakt ${requiredTeamSize} spelare för denna turnering.`
+      };
+    }
+
+    if (!isAdmin && viewerTeam.myRole !== "CAPTAIN") {
+      return {
+        enabled: false,
+        reason: "Only team captain can sign up."
+      };
+    }
+
+    return {
+      enabled: true,
+      reason: ""
+    };
+  }, [registeredCount, requiredTeamSize, teamLimit, tournamentStatus, viewerRole, viewerTeam]);
+
+  async function submitSignup() {
+    if (!signupState.enabled) {
+      showToast(signupState.reason, "error");
+      return;
+    }
+    if (!viewerTeam) {
+      showToast("Create or join a team first.", "error");
+      return;
+    }
+
+    setSignupLoading(true);
+    try {
+      const response = await fetch(`/api/tournaments/${tournamentId}/register`, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json"
+        },
+        body: JSON.stringify({
+          teamId: viewerTeam.id
+        })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Could not sign up team.");
+      }
+
+      showToast("Team signat till turneringen.", "success");
+      router.refresh();
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Could not sign up team.", "error");
+    } finally {
+      setSignupLoading(false);
+    }
+  }
+
   return (
     <section className="panel mt-4">
-      <div className="mb-4 flex flex-wrap gap-2 border-b border-border pb-3">
+      <div className="mb-4 flex flex-wrap items-center gap-2 border-b border-border pb-3">
         <button className={`btn ${activeTab === "bracket" ? "btn-primary" : ""}`} onClick={() => setActiveTab("bracket")} type="button">
           Bracket
         </button>
@@ -188,6 +322,15 @@ export default function TournamentTabs({ matches, ruleset, teams }: TournamentTa
         </button>
         <button className={`btn ${activeTab === "teams" ? "btn-primary" : ""}`} onClick={() => setActiveTab("teams")} type="button">
           Lag & Spelare
+        </button>
+        <button
+          className="btn btn-primary ml-auto"
+          disabled={signupLoading}
+          onClick={() => void submitSignup()}
+          title={signupState.enabled ? "Sign up your team" : signupState.reason}
+          type="button"
+        >
+          {signupLoading ? "Signing up..." : "Signup"}
         </button>
       </div>
 
@@ -234,7 +377,7 @@ export default function TournamentTabs({ matches, ruleset, teams }: TournamentTa
 
                               return (
                                 <article
-                                  className="absolute overflow-hidden rounded-md border border-[#1d2a45] bg-[#0b1230] shadow-[0_14px_28px_rgba(0,0,0,0.28)]"
+                                  className="absolute overflow-hidden rounded-md border border-[#2B3240] bg-[#161B22] shadow-[0_14px_28px_rgba(0,0,0,0.28)]"
                                   key={match.id}
                                   style={{ top, height: bracketLayout.cardHeight, width: bracketLayout.columnWidth }}
                                 >
@@ -242,14 +385,14 @@ export default function TournamentTabs({ matches, ruleset, teams }: TournamentTa
                                   <div className={`absolute right-0 bottom-0 h-1/2 w-2 ${stripClass(outcomeB)}`} />
 
                                   <div
-                                    className={`flex h-1/2 items-center justify-between border-b border-[#1d2740] px-3 text-sm ${participantRowClass(outcomeA)}`}
+                                    className={`flex h-1/2 items-center justify-between border-b border-[#2B3240] px-3 text-sm ${participantRowClass(outcomeA)}`}
                                   >
                                     <span className="max-w-[220px] truncate font-semibold">{teamA}</span>
-                                    <span className="text-[11px] uppercase tracking-[0.08em] text-[#8ea2c7]">{outcomeA}</span>
+                                    <span className="text-[11px] uppercase tracking-[0.08em] text-[#9AA4B2]">{outcomeA}</span>
                                   </div>
                                   <div className={`flex h-1/2 items-center justify-between px-3 text-sm ${participantRowClass(outcomeB)}`}>
                                     <span className="max-w-[220px] truncate font-semibold">{teamB}</span>
-                                    <span className="text-[11px] uppercase tracking-[0.08em] text-[#8ea2c7]">{outcomeB}</span>
+                                    <span className="text-[11px] uppercase tracking-[0.08em] text-[#9AA4B2]">{outcomeB}</span>
                                   </div>
                                 </article>
                               );
@@ -275,11 +418,11 @@ export default function TournamentTabs({ matches, ruleset, teams }: TournamentTa
                                       }}
                                       viewBox={`0 0 ${bracketLayout.connectorWidth} ${connectorHeight}`}
                                     >
-                                      <line stroke="#bcc8de" strokeWidth="2" x1="0" x2={midX} y1="0" y2="0" />
-                                      <line stroke="#bcc8de" strokeWidth="2" x1="0" x2={midX} y1={connectorHeight} y2={connectorHeight} />
-                                      <line stroke="#bcc8de" strokeWidth="2" x1={midX} x2={midX} y1="0" y2={connectorHeight} />
+                                      <line stroke="#9AA4B2" strokeWidth="2" x1="0" x2={midX} y1="0" y2="0" />
+                                      <line stroke="#9AA4B2" strokeWidth="2" x1="0" x2={midX} y1={connectorHeight} y2={connectorHeight} />
+                                      <line stroke="#9AA4B2" strokeWidth="2" x1={midX} x2={midX} y1="0" y2={connectorHeight} />
                                       <line
-                                        stroke="#bcc8de"
+                                        stroke="#9AA4B2"
                                         strokeWidth="2"
                                         x1={midX}
                                         x2={bracketLayout.connectorWidth}
@@ -308,13 +451,13 @@ export default function TournamentTabs({ matches, ruleset, teams }: TournamentTa
             <p className="text-sm text-muted">Rules are not configured yet.</p>
           ) : (
             <div className="space-y-3">
-              <div className="rounded-lg border border-border/70 bg-[#141821] p-4 text-sm">
+              <div className="rounded-lg border border-border/70 bg-[#161B22] p-4 text-sm">
                 <p className="mb-2 text-xs uppercase tracking-[0.12em] text-muted">Regler</p>
-                <p className="whitespace-pre-line text-[#d7deef]">
+                <p className="whitespace-pre-line text-[#E6EDF3]">
                   {ruleset.rulesText?.trim() ? ruleset.rulesText : "Inga specifika regler har lagts till ännu."}
                 </p>
               </div>
-              <div className="rounded-lg border border-border/70 bg-[#141821] p-4 text-sm">
+              <div className="rounded-lg border border-border/70 bg-[#161B22] p-4 text-sm">
                 <p>Game: {ruleset.gameName}</p>
                 <p>Mode: {ruleset.modeLabel}</p>
                 <p>Lagstorlek: {ruleset.teamSize}</p>
@@ -337,7 +480,7 @@ export default function TournamentTabs({ matches, ruleset, teams }: TournamentTa
             <p className="text-sm text-muted">No registered teams yet.</p>
           ) : (
             teams.map((team) => (
-              <article className="rounded-lg border border-border/70 bg-[#141821] p-3" key={team.id}>
+              <article className="rounded-lg border border-border/70 bg-[#161B22] p-3" key={team.id}>
                 <h3 className="font-semibold">
                   {team.name} {team.tag ? <span className="text-muted">[{team.tag}]</span> : null}
                 </h3>
@@ -346,7 +489,7 @@ export default function TournamentTabs({ matches, ruleset, teams }: TournamentTa
                   {team.members.map((member) => (
                     <li key={member.id}>
                       {member.username ? (
-                        <Link className="transition-colors hover:text-[#6ed6ff]" href={`/players/${member.username}`}>
+                        <Link className="transition-colors hover:text-[#7C3AED]" href={`/players/${member.username}`}>
                           {member.name}
                         </Link>
                       ) : (

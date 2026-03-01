@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
+import { showToast } from "@/lib/toast";
 
 type ProfileClientProps = {
   name: string;
@@ -79,17 +80,12 @@ export default function ProfileClient({
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [passwordLoading, setPasswordLoading] = useState(false);
-  const [passwordError, setPasswordError] = useState("");
-  const [passwordSuccess, setPasswordSuccess] = useState("");
   const [profileImageUrl, setProfileImageUrl] = useState<string | null>(initialProfileImageUrl);
-  const [generalFeedback, setGeneralFeedback] = useState("");
-  const [generalError, setGeneralError] = useState("");
   const [generalLoading, setGeneralLoading] = useState(false);
 
   const [teams, setTeams] = useState<TeamData[]>([]);
   const [invitations, setInvitations] = useState<InvitationData[]>([]);
   const [teamLoading, setTeamLoading] = useState(false);
-  const [teamFeedback, setTeamFeedback] = useState("");
 
   const [createTeamName, setCreateTeamName] = useState("");
   const [createTeamTag, setCreateTeamTag] = useState("");
@@ -113,7 +109,7 @@ export default function ProfileClient({
   }
 
   useEffect(() => {
-    void loadTeamData().catch((error) => setTeamFeedback(error.message));
+    void loadTeamData().catch((error) => showToast(error.message, "error"));
   }, []);
 
   useEffect(() => {
@@ -122,11 +118,9 @@ export default function ProfileClient({
 
   async function submitPassword(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setPasswordError("");
-    setPasswordSuccess("");
 
     if (newPassword !== confirmNewPassword) {
-      setPasswordError("New passwords do not match.");
+      showToast("New passwords do not match.", "error");
       return;
     }
 
@@ -143,9 +137,9 @@ export default function ProfileClient({
       setCurrentPassword("");
       setNewPassword("");
       setConfirmNewPassword("");
-      setPasswordSuccess("Password updated.");
+      showToast("Password updated.", "success");
     } catch (error) {
-      setPasswordError(error instanceof Error ? error.message : "Could not update password.");
+      showToast(error instanceof Error ? error.message : "Could not update password.", "error");
     } finally {
       setPasswordLoading(false);
     }
@@ -156,8 +150,6 @@ export default function ProfileClient({
     formData.append("image", file);
 
     setGeneralLoading(true);
-    setGeneralFeedback("");
-    setGeneralError("");
 
     try {
       const response = await fetch("/api/profile/image", {
@@ -171,9 +163,9 @@ export default function ProfileClient({
       }
 
       setProfileImageUrl((payload.profileImageUrl as string) ?? null);
-      setGeneralFeedback("Profile image updated.");
+      showToast("Profile image updated.", "success");
     } catch (error) {
-      setGeneralError(error instanceof Error ? error.message : "Could not upload profile image.");
+      showToast(error instanceof Error ? error.message : "Could not upload profile image.", "error");
     } finally {
       setGeneralLoading(false);
     }
@@ -181,7 +173,7 @@ export default function ProfileClient({
 
   async function uploadTeamLogo(file: File) {
     if (!myTeam?.id || myTeam.myRole !== "CAPTAIN") {
-      setTeamFeedback("Only team captain can upload team logo.");
+      showToast("Only team captain can upload team logo.", "error");
       return;
     }
 
@@ -189,7 +181,6 @@ export default function ProfileClient({
     formData.append("image", file);
 
     setTeamLoading(true);
-    setTeamFeedback("");
 
     try {
       const response = await fetch(`/api/teams/${myTeam.id}/logo`, {
@@ -202,9 +193,9 @@ export default function ProfileClient({
       }
 
       await loadTeamData();
-      setTeamFeedback("Team logo updated.");
+      showToast("Team logo updated.", "success");
     } catch (error) {
-      setTeamFeedback(error instanceof Error ? error.message : "Could not upload team logo.");
+      showToast(error instanceof Error ? error.message : "Could not upload team logo.", "error");
     } finally {
       setTeamLoading(false);
     }
@@ -212,12 +203,11 @@ export default function ProfileClient({
 
   async function createTeam() {
     if (!createTeamName.trim()) {
-      setTeamFeedback("Team name is required.");
+      showToast("Team name is required.", "error");
       return;
     }
 
     setTeamLoading(true);
-    setTeamFeedback("");
     try {
       await callApi("/api/teams", {
         method: "POST",
@@ -230,9 +220,9 @@ export default function ProfileClient({
       setCreateTeamName("");
       setCreateTeamTag("");
       await loadTeamData();
-      setTeamFeedback("Team created.");
+      showToast("Team created.", "success");
     } catch (error) {
-      setTeamFeedback(error instanceof Error ? error.message : "Could not create team.");
+      showToast(error instanceof Error ? error.message : "Could not create team.", "error");
     } finally {
       setTeamLoading(false);
     }
@@ -240,12 +230,11 @@ export default function ProfileClient({
 
   async function sendInvite() {
     if (!captainTeam?.id || !inviteUsername.trim()) {
-      setTeamFeedback("You must be team captain to invite users.");
+      showToast("You must be team captain to invite users.", "error");
       return;
     }
 
     setTeamLoading(true);
-    setTeamFeedback("");
     try {
       await callApi(`/api/teams/${captainTeam.id}/invite`, {
         method: "POST",
@@ -255,9 +244,9 @@ export default function ProfileClient({
       });
       setInviteUsername("");
       await loadTeamData();
-      setTeamFeedback("Invite sent.");
+      showToast("Invite sent.", "success");
     } catch (error) {
-      setTeamFeedback(error instanceof Error ? error.message : "Could not send invite.");
+      showToast(error instanceof Error ? error.message : "Could not send invite.", "error");
     } finally {
       setTeamLoading(false);
     }
@@ -265,16 +254,15 @@ export default function ProfileClient({
 
   async function respondToInvite(invitationId: string, accept: boolean) {
     setTeamLoading(true);
-    setTeamFeedback("");
     try {
       await callApi(`/api/team-invitations/${invitationId}/respond`, {
         method: "POST",
         body: JSON.stringify({ accept })
       });
       await loadTeamData();
-      setTeamFeedback(accept ? "Invitation accepted." : "Invitation declined.");
+      showToast(accept ? "Invitation accepted." : "Invitation declined.", "success");
     } catch (error) {
-      setTeamFeedback(error instanceof Error ? error.message : "Could not process invitation.");
+      showToast(error instanceof Error ? error.message : "Could not process invitation.", "error");
     } finally {
       setTeamLoading(false);
     }
@@ -291,15 +279,14 @@ export default function ProfileClient({
     }
 
     setTeamLoading(true);
-    setTeamFeedback("");
     try {
       await callApi(`/api/teams/${myTeam.id}/leave`, {
         method: "POST"
       });
       await loadTeamData();
-      setTeamFeedback("You left the team.");
+      showToast("You left the team.", "success");
     } catch (error) {
-      setTeamFeedback(error instanceof Error ? error.message : "Could not leave team.");
+      showToast(error instanceof Error ? error.message : "Could not leave team.", "error");
     } finally {
       setTeamLoading(false);
     }
@@ -316,15 +303,14 @@ export default function ProfileClient({
     }
 
     setTeamLoading(true);
-    setTeamFeedback("");
     try {
       await callApi(`/api/teams/${myTeam.id}`, {
         method: "DELETE"
       });
       await loadTeamData();
-      setTeamFeedback("Team disbanded.");
+      showToast("Team disbanded.", "success");
     } catch (error) {
-      setTeamFeedback(error instanceof Error ? error.message : "Could not disband team.");
+      showToast(error instanceof Error ? error.message : "Could not disband team.", "error");
     } finally {
       setTeamLoading(false);
     }
@@ -338,7 +324,7 @@ export default function ProfileClient({
   return (
     <main className="container py-8">
       <section className="grid gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
-        <aside className="panel h-fit lg:sticky lg:top-24">
+        <aside className="panel sidebar-panel h-fit lg:sticky lg:top-24">
           <p className="mb-3 text-xs uppercase tracking-[0.16em] text-muted">Sections</p>
           <div className="space-y-2">
             {menuItems.map((item) => (
@@ -360,14 +346,14 @@ export default function ProfileClient({
             <section className="panel">
               <h2 className="text-lg font-semibold">General</h2>
               <p className="mt-1 text-sm text-muted">General account settings</p>
-              <article className="mt-3 rounded-lg border border-border/70 bg-[#141821] p-4">
+              <article className="mt-3 rounded-lg border border-border/70 bg-[#161B22] p-4">
                 <div className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
                   <div className="flex flex-col items-start gap-1">
-                    <label className="group relative h-28 w-28 cursor-pointer overflow-hidden rounded-md border border-border/70 bg-[#0f1420]">
+                    <label className="group relative h-28 w-28 cursor-pointer overflow-hidden rounded-md border border-border/70 bg-[#1C212B]">
                       {profileImageUrl ? (
                         <img alt="Profile" className="h-full w-full object-cover" src={profileImageUrl} />
                       ) : (
-                        <div className="flex h-full w-full items-center justify-center bg-[#10182a] text-xs font-semibold text-muted">
+                        <div className="flex h-full w-full items-center justify-center bg-[#1C212B] text-xs font-semibold text-muted">
                           No image
                         </div>
                       )}
@@ -389,7 +375,7 @@ export default function ProfileClient({
                       />
                     </label>
                   </div>
-                  <div className="min-w-0 rounded-lg border border-border/60 bg-[#111827] p-3">
+                  <div className="min-w-0 rounded-lg border border-border/60 bg-[#161B22] p-3">
                     <p className="text-xs uppercase tracking-[0.1em] text-muted">Personal</p>
                     <div className="mt-2 space-y-2 text-sm">
                       <div className="flex items-center justify-between border-b border-border/50 pb-2">
@@ -425,8 +411,6 @@ export default function ProfileClient({
                     </div>
                   </div>
                 </div>
-                {generalError ? <p className="mt-3 text-sm text-danger">{generalError}</p> : null}
-                {generalFeedback ? <p className="mt-3 text-sm text-success">{generalFeedback}</p> : null}
               </article>
               <div className="mt-5 border-t border-border/70 pt-4">
                 <h3 className="text-base font-semibold">Change Password</h3>
@@ -457,8 +441,6 @@ export default function ProfileClient({
                     type="password"
                     value={confirmNewPassword}
                   />
-                  {passwordError ? <p className="text-sm text-danger">{passwordError}</p> : null}
-                  {passwordSuccess ? <p className="text-sm text-success">{passwordSuccess}</p> : null}
                   <button className="btn btn-primary w-full" disabled={passwordLoading} type="submit">
                     {passwordLoading ? "Updating..." : "Update password"}
                   </button>
@@ -473,15 +455,15 @@ export default function ProfileClient({
               <p className="mt-1 text-sm text-muted">Each account can only belong to one team at a time.</p>
 
               {myTeam ? (
-                <article className="mt-3 rounded-lg border border-border/70 bg-[#141821] p-4">
+                <article className="mt-3 rounded-lg border border-border/70 bg-[#161B22] p-4">
                   <div className="grid gap-4 md:grid-cols-[220px_minmax(0,1fr)]">
                     <div className="flex flex-col items-start gap-1">
                       {myTeam.myRole === "CAPTAIN" ? (
-                        <label className="group relative h-28 w-28 cursor-pointer overflow-hidden rounded-md border border-border/70 bg-[#0f1420]">
+                        <label className="group relative h-28 w-28 cursor-pointer overflow-hidden rounded-md border border-border/70 bg-[#1C212B]">
                           {myTeam.logoUrl ? (
                             <img alt="Team logo" className="h-full w-full object-cover" src={myTeam.logoUrl} />
                           ) : (
-                            <div className="flex h-full w-full items-center justify-center bg-[#10182a] text-xs font-semibold text-muted">
+                            <div className="flex h-full w-full items-center justify-center bg-[#1C212B] text-xs font-semibold text-muted">
                               No logo
                             </div>
                           )}
@@ -503,18 +485,18 @@ export default function ProfileClient({
                           />
                         </label>
                       ) : (
-                        <div className="h-28 w-28 overflow-hidden rounded-md border border-border/70 bg-[#0f1420]">
+                        <div className="h-28 w-28 overflow-hidden rounded-md border border-border/70 bg-[#1C212B]">
                           {myTeam.logoUrl ? (
                             <img alt="Team logo" className="h-full w-full object-cover" src={myTeam.logoUrl} />
                           ) : (
-                            <div className="flex h-full w-full items-center justify-center bg-[#10182a] text-xs font-semibold text-muted">
+                            <div className="flex h-full w-full items-center justify-center bg-[#1C212B] text-xs font-semibold text-muted">
                               No logo
                             </div>
                           )}
                         </div>
                       )}
                     </div>
-                    <div className="min-w-0 rounded-lg border border-border/60 bg-[#111827] p-3">
+                    <div className="min-w-0 rounded-lg border border-border/60 bg-[#161B22] p-3">
                       <p className="text-xs uppercase tracking-[0.1em] text-muted">Team</p>
                       <div className="mt-2 space-y-2 text-sm">
                         <div className="flex items-center justify-between border-b border-border/50 pb-2">
@@ -538,7 +520,7 @@ export default function ProfileClient({
                         {myTeam.members.map((member) => (
                           <li key={member.id}>
                             {member.username ? (
-                              <Link className="transition-colors hover:text-[#6ed6ff]" href={`/players/${member.username}`}>
+                              <Link className="transition-colors hover:text-[#7C3AED]" href={`/players/${member.username}`}>
                                 {member.name} (@{member.username})
                               </Link>
                             ) : (
@@ -606,7 +588,7 @@ export default function ProfileClient({
                 ) : (
                   <div className="mt-3 space-y-2">
                     {invitations.map((invitation) => (
-                      <article className="rounded-lg border border-border/70 bg-[#141821] p-3" key={invitation.id}>
+                      <article className="rounded-lg border border-border/70 bg-[#161B22] p-3" key={invitation.id}>
                         <p className="font-medium">
                           {invitation.team.name}
                           {invitation.team.tag ? ` [${invitation.team.tag}]` : ""}
@@ -633,7 +615,6 @@ export default function ProfileClient({
                   </div>
                 )}
               </div>
-              {teamFeedback ? <p className="mt-4 rounded-lg border border-border bg-surface px-3 py-2 text-sm">{teamFeedback}</p> : null}
             </section>
           ) : null}
         </div>

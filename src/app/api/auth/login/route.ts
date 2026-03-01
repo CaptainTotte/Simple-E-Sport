@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { accountBlockedMessage, isAccountBlocked } from "@/lib/account-status";
 import { errorResponse, parseJson } from "@/lib/http";
 import { verifyPassword } from "@/lib/password";
 import { prisma } from "@/lib/prisma";
@@ -16,6 +17,10 @@ export async function POST(req: Request) {
 
     if (!user || !verifyPassword(body.password, user.passwordHash)) {
       return NextResponse.json({ error: "Invalid username or password." }, { status: 401 });
+    }
+
+    if (isAccountBlocked(user)) {
+      return NextResponse.json({ error: accountBlockedMessage(user) ?? "Account access blocked." }, { status: 403 });
     }
 
     const token = createSessionToken(user.id, user.globalRole);
