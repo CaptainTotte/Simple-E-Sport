@@ -1,9 +1,10 @@
 import { RegistrationStatus, TournamentStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
+import { z } from "zod";
 import { requireActor } from "@/lib/auth";
 import { writeAuditLog } from "@/lib/audit";
 import { errorResponse, parseJson } from "@/lib/http";
-import { requireTeamCaptainOrAdmin } from "@/lib/permissions";
+import { requireTeamCaptainOrAdmin, requireTournamentAdmin } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { registerTeamSchema } from "@/lib/validation";
 
@@ -115,6 +116,59 @@ export async function POST(req: Request, ctx: RouteContext) {
     }
     if (error instanceof Error && error.message === "Tournament is full.") {
       return NextResponse.json({ error: "Tournament is full." }, { status: 409 });
+    }
+    return errorResponse(error);
+  }
+}
+
+const removeRegistrationSchema = z.object({
+  teamId: z.string().min(1)
+});
+
+export async function DELETE(req: Request, ctx: RouteContext) {
+  try {
+    const actor = await requireActor(prisma, req);
+    const tournamentId = ctx.params.id;
+    await requireTournamentAdmin(prisma, actor, tournamentId);
+
+    const body = await parseJson(req, removeRegistrationSchema);
+
+    const deleted = await prisma.$transaction(async (tx) => {
+      const registration = await tx.tournamentRegistration.findFirst({
+        where: { tournamentId, teamId: body.teamId }
+      });
+
+      if (!registration) {
+        return null;
+      }
+
+      await writeAuditLog(tx, {
+        actorUserId: actor.id,
+        action: "TEAM_REGISTRATION_REMOVED",
+        entityType: "TournamentRegistration",
+        entityId: registration.id,
+        tournamentId,
+        metadata: { teamId: body.teamId }
+      });
+
+      await tx.tournamentRegistration.delete({
+        where: { id: registration.id }
+      });
+
+      return registration;
+    });
+
+    if (!deleted) {
+      return NextResponse.json({ error: "Registration not found." }, { status: 404 });
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+    }
+    if (error instanceof Error && error.message.startsWith("Forbidden")) {
+      return NextResponse.json({ error: error.message }, { status: 403 });
     }
     return errorResponse(error);
   }

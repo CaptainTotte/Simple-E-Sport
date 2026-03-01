@@ -105,6 +105,14 @@ type AdminUserRecord = {
   };
 };
 
+type ModerationLog = {
+  id: string;
+  action: string;
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
+  actor: { name: string; username: string | null };
+};
+
 type AdminView = "create" | "teams" | "users" | "tournaments" | "advanced";
 
 const DEFAULT_TOURNAMENT_RULES = [
@@ -161,7 +169,9 @@ export default function AdminClientPage() {
   const [dummyRosterInput, setDummyRosterInput] = useState("");
   const [expandedTeamId, setExpandedTeamId] = useState<string | null>(null);
   const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
-  const [timeoutDialog, setTimeoutDialog] = useState<{ userId: string; days: 3 | 14 | 30 } | null>(null);
+  const [moderationLogs, setModerationLogs] = useState<ModerationLog[]>([]);
+  const [timeoutDialog, setTimeoutDialog] = useState<{ userId: string; days: 3 | 14 | 30; reason: string } | null>(null);
+  const [banDialog, setBanDialog] = useState<{ userId: string; name: string; reason: string } | null>(null);
   const [usernameDialog, setUsernameDialog] = useState<{ userId: string; value: string } | null>(null);
   const [adminToggleDialog, setAdminToggleDialog] = useState<{ userId: string; name: string; enable: boolean } | null>(null);
   const [deleteDialog, setDeleteDialog] = useState<{ kind: "team" | "user"; id: string; name: string } | null>(null);
@@ -308,7 +318,13 @@ export default function AdminClientPage() {
       setTimeoutDialog(null);
       setUsernameDialog(null);
       setAdminToggleDialog(null);
+      setModerationLogs([]);
+      return;
     }
+    setModerationLogs([]);
+    callApi<{ logs: ModerationLog[] }>(`/api/admin/users/${selectedUserRecord.id}`)
+      .then((data) => setModerationLogs(data.logs))
+      .catch(() => {/* silent */});
   }, [selectedUserRecord]);
 
   async function runAction(action: () => Promise<void>) {
@@ -365,12 +381,46 @@ export default function AdminClientPage() {
     }
   }
 
+  function nextTournamentStatus(status: string): string | null {
+    if (status === "DRAFT") return "REGISTRATION_OPEN";
+    if (status === "REGISTRATION_OPEN") return "REGISTRATION_CLOSED";
+    if (status === "REGISTRATION_CLOSED") return "LIVE";
+    if (status === "LIVE") return "COMPLETED";
+    return null;
+  }
+
+  function nextTournamentStatusLabel(status: string): string | null {
+    if (status === "DRAFT") return "Open Reg.";
+    if (status === "REGISTRATION_OPEN") return "Close Reg.";
+    if (status === "REGISTRATION_CLOSED") return "Go Live";
+    if (status === "LIVE") return "Complete";
+    return null;
+  }
+
+  async function advanceTournamentStatus(tournamentId: string, nextStatus: string) {
+    await runAction(async () => {
+      const result = await callApi<{ tournament: { id: string; status: string } }>(
+        `/api/tournaments/${tournamentId}/status`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ status: nextStatus })
+        }
+      );
+      setTournaments((current) =>
+        current.map((tournament) =>
+          tournament.id === tournamentId ? { ...tournament, status: result.tournament.status } : tournament
+        )
+      );
+      showToast(`Status updated to ${formatTournamentStatus(result.tournament.status)}.`, "success");
+    });
+  }
+
   async function applyUserAction(
     userId: string,
     action:
-      | { action: "set_timeout"; days: 3 | 14 | 30 }
+      | { action: "set_timeout"; days: 3 | 14 | 30; reason?: string }
       | { action: "clear_timeout" }
-      | { action: "ban" }
+      | { action: "ban"; reason?: string }
       | { action: "unban" }
       | { action: "set_username"; username: string }
       | { action: "remove_avatar" }
@@ -401,16 +451,41 @@ export default function AdminClientPage() {
   function openTimeoutDialog(userId: string) {
     setUsernameDialog(null);
     setAdminToggleDialog(null);
-    setTimeoutDialog({ userId, days: 3 });
+    setBanDialog(null);
+    setTimeoutDialog({ userId, days: 3, reason: "" });
   }
 
   function submitTimeoutDialog() {
     if (!timeoutDialog) {
       return;
     }
-    const { userId, days } = timeoutDialog;
+    const { userId, days, reason } = timeoutDialog;
     setTimeoutDialog(null);
-    void applyUserAction(userId, { action: "set_timeout", days }, `User timed out (${days} days).`);
+    void applyUserAction(
+      userId,
+      { action: "set_timeout", days, reason: reason.trim() || undefined },
+      `User timed out (${days} days).`
+    );
+  }
+
+  function openBanDialog(userId: string, name: string) {
+    setTimeoutDialog(null);
+    setUsernameDialog(null);
+    setAdminToggleDialog(null);
+    setBanDialog({ userId, name, reason: "" });
+  }
+
+  function submitBanDialog() {
+    if (!banDialog) {
+      return;
+    }
+    const { userId, reason } = banDialog;
+    setBanDialog(null);
+    void applyUserAction(
+      userId,
+      { action: "ban", reason: reason.trim() || undefined },
+      "User banned."
+    );
   }
 
   function openUsernameDialog(userId: string, currentUsername: string | null) {
@@ -1059,6 +1134,22 @@ export default function AdminClientPage() {
                         </td>
                         <td className="py-2 text-right whitespace-nowrap">
                           <div className="inline-flex items-center gap-1">
+                            {(() => {
+                              const nextStatus = nextTournamentStatus(tournament.status);
+                              const nextLabel = nextTournamentStatusLabel(tournament.status);
+                              return nextStatus && nextLabel ? (
+                                <button
+                                  aria-label={`${nextLabel} for ${tournament.name}`}
+                                  className="btn text-xs"
+                                  disabled={loading}
+                                  onClick={() => void advanceTournamentStatus(tournament.id, nextStatus)}
+                                  title={`Advance to: ${formatTournamentStatus(nextStatus)}`}
+                                  type="button"
+                                >
+                                  {nextLabel}
+                                </button>
+                              ) : null;
+                            })()}
                             <Link
                               aria-label={`Open ${tournament.name}`}
                               className="btn inline-flex h-10 w-10 shrink-0 items-center justify-center p-0"
@@ -1350,7 +1441,7 @@ export default function AdminClientPage() {
                     <button
                       className="btn w-full"
                       disabled={loading || selectedUserModerationLocked}
-                      onClick={() => void applyUserAction(selectedUserRecord.id, { action: "ban" }, "User banned.")}
+                      onClick={() => openBanDialog(selectedUserRecord.id, selectedUserRecord.name)}
                       type="button"
                     >
                       Ban
@@ -1401,6 +1492,34 @@ export default function AdminClientPage() {
                       : "Your own account cannot be moderated."}
                   </p>
                 ) : null}
+                {moderationLogs.length > 0 ? (
+                  <div className="mt-4 border-t border-border/70 pt-3">
+                    <p className="mb-2 text-xs uppercase tracking-[0.08em] text-muted">Moderation History</p>
+                    <div className="space-y-2">
+                      {moderationLogs.map((log) => {
+                        const meta = log.metadata as { reason?: string; days?: number } | null;
+                        const actionLabel = log.action === "USER_TIMEOUT" ? "Timeout" : "Ban";
+                        const days = meta?.days;
+                        return (
+                          <div className="rounded-md border border-border/60 bg-[#111317] p-2 text-xs" key={log.id}>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className={`font-semibold ${log.action === "USER_BANNED" ? "text-[#EF4444]" : "text-[#F59E0B]"}`}>
+                                {actionLabel}{days ? ` (${days}d)` : ""}
+                              </span>
+                              <span className="text-muted">{formatDate(log.createdAt)}</span>
+                            </div>
+                            {meta?.reason ? (
+                              <p className="mt-1 text-muted">{meta.reason}</p>
+                            ) : null}
+                            <p className="mt-0.5 text-muted">
+                              By: {log.actor.name}{log.actor.username ? ` (@${log.actor.username})` : ""}
+                            </p>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : null}
               </div>
             </div>
           </article>
@@ -1431,12 +1550,52 @@ export default function AdminClientPage() {
                 );
               })}
             </div>
+            <textarea
+              className="input mt-3 min-h-[60px] resize-none text-sm"
+              maxLength={500}
+              onChange={(event) => setTimeoutDialog((current) => (current ? { ...current, reason: event.target.value } : current))}
+              placeholder="Reason (optional)"
+              value={timeoutDialog.reason}
+            />
             <div className="mt-3 grid grid-cols-2 gap-2">
               <button className="btn" onClick={() => setTimeoutDialog(null)} type="button">
                 Cancel
               </button>
               <button className="btn btn-primary" onClick={submitTimeoutDialog} type="button">
                 Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {banDialog ? (
+        <div className="dialog-overlay z-[300]" onClick={() => setBanDialog(null)}>
+          <div
+            className="dialog-card w-full max-w-xs p-4"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <p className="text-sm font-semibold">Ban User</p>
+            <p className="mt-1 text-sm text-muted">
+              Ban <span className="font-medium text-[#E5E7EB]">{banDialog.name}</span>? They will be unable to log in.
+            </p>
+            <textarea
+              className="input mt-3 min-h-[60px] resize-none text-sm"
+              maxLength={500}
+              onChange={(event) => setBanDialog((current) => (current ? { ...current, reason: event.target.value } : current))}
+              placeholder="Reason (optional)"
+              value={banDialog.reason}
+            />
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <button className="btn" onClick={() => setBanDialog(null)} type="button">
+                Cancel
+              </button>
+              <button
+                className="btn !border-[#EF4444] !bg-[#2A1318] !text-[#EF4444] hover:!border-[#EF4444] hover:!bg-[#3a1a21]"
+                onClick={submitBanDialog}
+                type="button"
+              >
+                Ban
               </button>
             </div>
           </div>

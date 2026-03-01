@@ -581,16 +581,37 @@ export default function ProfileClient({
               )}
 
               {captainTeam ? (
-                <div className="mt-5 grid gap-2 md:grid-cols-[1fr_auto]">
-                  <input
-                    className="input"
-                    onChange={(event) => setInviteUsername(event.target.value)}
-                    placeholder="Invite username"
-                    value={inviteUsername}
-                  />
-                  <button className="btn" disabled={teamLoading} onClick={() => void sendInvite()} type="button">
-                    Invite
-                  </button>
+                <div className="mt-5 space-y-2">
+                  <div className="grid gap-2 md:grid-cols-[1fr_auto]">
+                    <input
+                      className="input"
+                      onChange={(event) => setInviteUsername(event.target.value)}
+                      placeholder="Invite username"
+                      value={inviteUsername}
+                    />
+                    <button className="btn" disabled={teamLoading} onClick={() => void sendInvite()} type="button">
+                      Invite
+                    </button>
+                  </div>
+                  {captainTeam.pendingInvites.length > 0 ? (
+                    <div className="rounded-lg border border-border/60 bg-[#181A1F] p-3">
+                      <p className="mb-2 text-xs uppercase tracking-[0.1em] text-muted">Pending sent invites</p>
+                      <ul className="space-y-1">
+                        {captainTeam.pendingInvites.map((invite) => (
+                          <li className="flex items-center gap-2 text-sm" key={invite.id}>
+                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#F59E0B]" />
+                            <span>
+                              {invite.inviteeName}
+                              {invite.inviteeUsername ? (
+                                <span className="text-muted"> (@{invite.inviteeUsername})</span>
+                              ) : null}
+                            </span>
+                            <span className="ml-auto text-xs text-muted">pending</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 

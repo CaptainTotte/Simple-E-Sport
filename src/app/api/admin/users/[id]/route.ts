@@ -1,6 +1,7 @@
 import { GlobalRole, TeamMemberRole } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { requireActor } from "@/lib/auth";
+import { writeAuditLog } from "@/lib/audit";
 import { deleteLocalUpload } from "@/lib/image-upload";
 import { errorResponse, parseJson } from "@/lib/http";
 import { prisma } from "@/lib/prisma";
@@ -61,15 +62,24 @@ export async function PATCH(req: Request, ctx: RouteContext) {
         return NextResponse.json({ error: "Cannot timeout superusers." }, { status: 409 });
       }
 
-      const user = await prisma.user.update({
-        where: { id: userId },
-        data: {
-          timeoutUntil: timeoutDate(action.days)
-        },
-        select: {
-          id: true,
-          timeoutUntil: true
-        }
+      const expiresAt = timeoutDate(action.days);
+      const user = await prisma.$transaction(async (tx) => {
+        await writeAuditLog(tx, {
+          actorUserId: actor.id,
+          action: "USER_TIMEOUT",
+          entityType: "User",
+          entityId: userId,
+          metadata: {
+            days: action.days,
+            expiresAt: expiresAt.toISOString(),
+            reason: action.reason ?? null
+          }
+        });
+        return tx.user.update({
+          where: { id: userId },
+          data: { timeoutUntil: expiresAt },
+          select: { id: true, timeoutUntil: true }
+        });
       });
       return NextResponse.json({ user });
     }
@@ -96,16 +106,21 @@ export async function PATCH(req: Request, ctx: RouteContext) {
         return NextResponse.json({ error: "Cannot ban superusers." }, { status: 409 });
       }
 
-      const user = await prisma.user.update({
-        where: { id: userId },
-        data: {
-          bannedAt: new Date(),
-          timeoutUntil: null
-        },
-        select: {
-          id: true,
-          bannedAt: true
-        }
+      const user = await prisma.$transaction(async (tx) => {
+        await writeAuditLog(tx, {
+          actorUserId: actor.id,
+          action: "USER_BANNED",
+          entityType: "User",
+          entityId: userId,
+          metadata: {
+            reason: action.reason ?? null
+          }
+        });
+        return tx.user.update({
+          where: { id: userId },
+          data: { bannedAt: new Date(), timeoutUntil: null },
+          select: { id: true, bannedAt: true }
+        });
       });
       return NextResponse.json({ user });
     }
@@ -194,6 +209,42 @@ export async function PATCH(req: Request, ctx: RouteContext) {
     }
     if ((error as { code?: string })?.code === "P2002") {
       return NextResponse.json({ error: "Username is already taken." }, { status: 409 });
+    }
+    return errorResponse(error);
+  }
+}
+
+export async function GET(req: Request, ctx: RouteContext) {
+  try {
+    const actor = await requireActor(prisma, req);
+    if (!isAdminRole(actor.role)) {
+      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
+    }
+
+    const userId = ctx.params.id;
+    const logs = await prisma.auditLog.findMany({
+      where: {
+        entityType: "User",
+        entityId: userId,
+        action: { in: ["USER_TIMEOUT", "USER_BANNED"] }
+      },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+      select: {
+        id: true,
+        action: true,
+        metadata: true,
+        createdAt: true,
+        actor: {
+          select: { name: true, username: true }
+        }
+      }
+    });
+
+    return NextResponse.json({ logs });
+  } catch (error) {
+    if (error instanceof Error && error.message === "Unauthorized") {
+      return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     }
     return errorResponse(error);
   }

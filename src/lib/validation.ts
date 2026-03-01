@@ -127,16 +127,22 @@ export const loginSchema = z.object({
   password: z.string().min(1)
 });
 
+export const updateTournamentStatusSchema = z.object({
+  status: z.enum(["REGISTRATION_OPEN", "REGISTRATION_CLOSED", "LIVE", "COMPLETED"])
+});
+
 export const adminUserActionSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("set_timeout"),
-    days: z.union([z.literal(3), z.literal(14), z.literal(30)])
+    days: z.union([z.literal(3), z.literal(14), z.literal(30)]),
+    reason: z.string().max(500).optional()
   }),
   z.object({
     action: z.literal("clear_timeout")
   }),
   z.object({
-    action: z.literal("ban")
+    action: z.literal("ban"),
+    reason: z.string().max(500).optional()
   }),
   z.object({
     action: z.literal("unban")

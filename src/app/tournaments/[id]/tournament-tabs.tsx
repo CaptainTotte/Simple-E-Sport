@@ -565,6 +565,31 @@ export default function TournamentTabs({
     }
   }
 
+  async function removeTeamRegistration(teamId: string, teamName: string) {
+    const confirmed = window.confirm(`Remove "${teamName}" from this tournament?`);
+    if (!confirmed) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/tournaments/${tournamentId}/register`, {
+        method: "DELETE",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ teamId })
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(payload.error ?? "Could not remove registration.");
+      }
+
+      setLiveTeams((current) => current.filter((team) => team.id !== teamId));
+      setLiveRegisteredCount((current) => Math.max(0, current - 1));
+      showToast(`${teamName} removed from tournament.`, "success");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Could not remove registration.", "error");
+    }
+  }
+
   async function removeAdminResult() {
     if (!matchDialog) {
       return;
@@ -616,15 +641,19 @@ export default function TournamentTabs({
         <button className={`btn ${activeTab === "teams" ? "btn-primary" : ""}`} onClick={() => setActiveTab("teams")} type="button">
           Lag & Spelare
         </button>
-        <button
-          className="btn btn-primary ml-auto"
-          disabled={signupLoading}
-          onClick={() => void submitSignup()}
-          title={signupState.enabled ? "Sign up your team" : signupState.reason}
-          type="button"
-        >
-          {signupLoading ? "Signing up..." : "Signup"}
-        </button>
+        <div className="ml-auto flex flex-col items-end gap-1">
+          <button
+            className="btn btn-primary"
+            disabled={signupLoading || !signupState.enabled}
+            onClick={() => void submitSignup()}
+            type="button"
+          >
+            {signupLoading ? "Signing up..." : "Signup"}
+          </button>
+          {!signupState.enabled && signupState.reason ? (
+            <p className="text-xs text-muted">{signupState.reason}</p>
+          ) : null}
+        </div>
       </div>
 
       {activeTab === "bracket" ? (
@@ -692,16 +721,34 @@ export default function TournamentTabs({
                                 Boolean(match.participantATeamId) &&
                                 Boolean(match.participantBTeamId);
 
+                              const isReportPending =
+                                match.status === "REPORTED" && match.latestReportStatus === "SUBMITTED";
+
                               return (
                                 <article
-                                  className={`absolute overflow-hidden rounded-md border border-[#2A2F36] bg-[#181A1F] shadow-[0_14px_28px_rgba(0,0,0,0.28)] ${
+                                  className={`absolute overflow-hidden rounded-md border shadow-[0_14px_28px_rgba(0,0,0,0.28)] ${
+                                    isReportPending
+                                      ? "border-[#F59E0B]/50 bg-[#181A1F]"
+                                      : "border-[#2A2F36] bg-[#181A1F]"
+                                  } ${
                                     canAdminReport ? "cursor-pointer transition-colors hover:border-[#6D5DFC] hover:bg-[#202329]" : ""
                                   }`}
                                   key={match.id}
                                   onClick={() => openAdminMatchDialog(match)}
                                   style={{ top, height: bracketLayout.cardHeight, width: bracketLayout.columnWidth }}
-                                  title={canAdminReport ? "Click to set or edit result" : undefined}
+                                  title={
+                                    isReportPending
+                                      ? "Pending review"
+                                      : canAdminReport
+                                        ? "Click to set or edit result"
+                                        : undefined
+                                  }
                                 >
+                                  {isReportPending ? (
+                                    <div className="absolute left-0 right-8 top-0 z-10 flex items-center gap-1 bg-[#F59E0B]/10 px-2 py-0.5">
+                                      <span className="text-[9px] font-semibold uppercase tracking-wider text-[#F59E0B]">Pending review</span>
+                                    </div>
+                                  ) : null}
                                   <div className={`absolute right-0 top-0 h-1/2 w-2 ${stripClass(outcomeA)}`} />
                                   <div className={`absolute right-0 bottom-0 h-1/2 w-2 ${stripClass(outcomeB)}`} />
 
@@ -809,14 +856,31 @@ export default function TournamentTabs({
           ) : (
             liveTeams.map((team) => (
               <article
-                className="group cursor-pointer rounded-lg border border-border/80 bg-[#202329] p-3 shadow-[0_10px_24px_rgba(0,0,0,0.2)] transition-colors hover:border-[#7C6EFF] hover:bg-[#262b33]"
+                className="group rounded-lg border border-border/80 bg-[#202329] p-3 shadow-[0_10px_24px_rgba(0,0,0,0.2)]"
                 key={team.id}
-                onClick={() => setTeamDialogTeamId(team.id)}
-                title="Open team card"
               >
-                <h3 className="font-semibold">
-                  {team.name} {team.tag ? <span className="text-muted">[{team.tag}]</span> : null}
-                </h3>
+                <div className="flex items-start justify-between gap-2">
+                  <button
+                    className="min-w-0 flex-1 cursor-pointer text-left transition-colors hover:text-[#7C6EFF]"
+                    onClick={() => setTeamDialogTeamId(team.id)}
+                    title="Open team card"
+                    type="button"
+                  >
+                    <h3 className="truncate font-semibold">
+                      {team.name} {team.tag ? <span className="text-muted">[{team.tag}]</span> : null}
+                    </h3>
+                  </button>
+                  {isAdmin ? (
+                    <button
+                      className="shrink-0 text-xs text-[#EF4444] opacity-60 transition-opacity hover:opacity-100"
+                      onClick={() => void removeTeamRegistration(team.id, team.name)}
+                      title="Remove from tournament"
+                      type="button"
+                    >
+                      Remove
+                    </button>
+                  ) : null}
+                </div>
                 <p className="text-xs">
                   <span className="text-muted">Registration: </span>
                   <span className={registrationStatusClass(team.status)}>{team.status}</span>
