@@ -142,9 +142,9 @@ async function callApi<T>(url: string, init?: RequestInit): Promise<T> {
 }
 
 const GAME_ICON_EXT: Record<string, string> = {
-  "counter-strike": "webp",
-  "league-of-legends": "webp",
-  "rocket-league": "webp",
+  "overwatch": "png",
+  "rocket-league": "png",
+  "valorant": "png",
 };
 
 function gameIconSrc(game: Game) {

@@ -14,9 +14,9 @@ const GAME_GRADIENTS: Record<string, string> = {
 };
 
 const GAME_ICON_EXT: Record<string, string> = {
-  "counter-strike": "webp",
-  "league-of-legends": "webp",
-  "rocket-league": "webp",
+  "overwatch": "png",
+  "rocket-league": "png",
+  "valorant": "png",
 };
 
 function gameGradient(slug: string): string {
