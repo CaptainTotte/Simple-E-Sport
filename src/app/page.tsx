@@ -111,7 +111,7 @@ export default async function HomePage() {
                   </div>
                 </div>
                 <div className="flex flex-1 flex-col p-4">
-                  <div>
+                  <div className="flex-1">
                     <p className="text-xs uppercase tracking-[0.12em] text-muted">{tournament.ruleset?.game.name}</p>
                     <h3 className="mt-1 text-lg font-semibold">{tournament.name}</h3>
                     <p className="mt-2 text-sm text-muted">Mode: {tournament.ruleset?.mode.label}</p>
