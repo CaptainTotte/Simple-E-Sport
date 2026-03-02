@@ -97,7 +97,7 @@ export default async function HomePage() {
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {tournaments.map((tournament) => (
-              <article className="overflow-hidden panel p-0" key={tournament.id}>
+              <article className="flex flex-col overflow-hidden panel p-0" key={tournament.id}>
                 <div className="relative h-40 w-full">
                   <Image
                     alt={tournament.ruleset?.game.name ?? "Game"}
@@ -110,16 +110,20 @@ export default async function HomePage() {
                     {statusLabel(tournament.status)}
                   </div>
                 </div>
-                <div className="p-4">
-                  <p className="text-xs uppercase tracking-[0.12em] text-muted">{tournament.ruleset?.game.name}</p>
-                  <h3 className="mt-1 text-lg font-semibold">{tournament.name}</h3>
-                  <p className="mt-2 text-sm text-muted">Mode: {tournament.ruleset?.mode.label}</p>
-                  <p className="text-sm text-muted">
-                    Teams: {tournament._count.registrations}/{tournament.teamLimit}
-                  </p>
-                  <Link className="btn btn-primary mt-3 inline-flex" href={`/tournaments/${tournament.id}`}>
-                    Open Tournament
-                  </Link>
+                <div className="flex flex-1 flex-col p-4">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.12em] text-muted">{tournament.ruleset?.game.name}</p>
+                    <h3 className="mt-1 text-lg font-semibold">{tournament.name}</h3>
+                    <p className="mt-2 text-sm text-muted">Mode: {tournament.ruleset?.mode.label}</p>
+                    <p className="text-sm text-muted">
+                      Teams: {tournament._count.registrations}/{tournament.teamLimit}
+                    </p>
+                  </div>
+                  <div className="mt-3 flex justify-end">
+                    <Link className="btn btn-primary inline-flex" href={`/tournaments/${tournament.id}`}>
+                      Open Tournament
+                    </Link>
+                  </div>
                 </div>
               </article>
             ))}
