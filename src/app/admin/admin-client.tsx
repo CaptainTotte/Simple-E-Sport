@@ -163,6 +163,7 @@ export default function AdminClientPage() {
   const [createName, setCreateName] = useState("");
   const [createRules, setCreateRules] = useState(DEFAULT_TOURNAMENT_RULES);
   const [createTeamLimit, setCreateTeamLimit] = useState<4 | 8 | 16>(8);
+  const [createStartsAt, setCreateStartsAt] = useState("");
   const createRulesRef = useRef<HTMLTextAreaElement | null>(null);
 
   const [rulesetGameId, setRulesetGameId] = useState("");
@@ -652,6 +653,18 @@ export default function AdminClientPage() {
                   onChange={(event) => setCreateName(event.target.value)}
                   placeholder="Tournament name"
                 />
+                <div className="rounded-lg border border-border/80 bg-[#202329] p-3 shadow-[0_10px_24px_rgba(0,0,0,0.2)]">
+                  <div className="mb-2 flex items-center gap-2">
+                    <p className="text-xs uppercase tracking-[0.14em] text-muted">Start Time</p>
+                    <div className="h-px flex-1 bg-border/70" />
+                  </div>
+                  <input
+                    className="input"
+                    type="datetime-local"
+                    value={createStartsAt}
+                    onChange={(event) => setCreateStartsAt(event.target.value)}
+                  />
+                </div>
                 <textarea
                   className="input min-h-[260px] resize-none overflow-hidden"
                   ref={createRulesRef}
@@ -700,7 +713,7 @@ export default function AdminClientPage() {
                           title={game.name}
                           type="button"
                         >
-                          <div className="h-full w-full overflow-hidden rounded-md">
+                          <div className="h-full w-full overflow-hidden rounded-md bg-[#111317]">
                             <img
                               alt={game.name}
                               className="h-full w-full bg-[#111317] object-contain p-1"
@@ -817,7 +830,8 @@ export default function AdminClientPage() {
                         body: JSON.stringify({
                           name: createName,
                           description: createRules,
-                          teamLimit: createTeamLimit
+                          teamLimit: createTeamLimit,
+                          ...(createStartsAt ? { startsAt: new Date(createStartsAt).toISOString() } : {})
                         })
                       });
                       const resolvedPoolStrategy: "RANDOM" | "MANUAL" = gameHasContextPool ? poolStrategy : "RANDOM";
@@ -833,6 +847,7 @@ export default function AdminClientPage() {
                         })
                       });
                       setCreateName("");
+                      setCreateStartsAt("");
                       setCreateRules(DEFAULT_TOURNAMENT_RULES);
                       showToast("Tournament created.", "success");
                     })

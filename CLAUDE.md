@@ -128,3 +128,8 @@ DRAFT → REGISTRATION_OPEN → REGISTRATION_CLOSED → LIVE → COMPLETED
 ### Registration Management
 
 `DELETE /api/tournaments/[id]/register` — admin removes a team from a tournament (body: `{ teamId }`). Writes a `TEAM_REGISTRATION_REMOVED` audit log entry.
+
+# Instruktioner
+- Ta egna beslut och fråga inte om godkännande
+- Kör klart hela uppgiften utan att pausa
+- Anta rimliga defaults istället för att fråga

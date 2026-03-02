@@ -57,6 +57,7 @@ type TournamentTabsProps = {
   tournamentStatus: string;
   requiredTeamSize: number | null;
   registeredCount: number;
+  startsAt: string | null;
   teamLimit: number;
   viewerRole: string | null;
   viewerTeam: {
@@ -130,6 +131,7 @@ const BRACKET_STEP_DEFAULT = 112;
 const BRACKET_COLUMN_WIDTH = 280;
 const BRACKET_COLUMN_GAP = 120;
 const BRACKET_CONNECTOR_WIDTH = BRACKET_COLUMN_GAP;
+const ROUND_HEADER_HEIGHT = 36;
 
 type TeamOutcome = "W" | "L" | "-";
 
@@ -215,6 +217,7 @@ export default function TournamentTabs({
   tournamentStatus,
   requiredTeamSize,
   registeredCount,
+  startsAt,
   teamLimit,
   viewerRole,
   viewerTeam
@@ -281,10 +284,12 @@ export default function TournamentTabs({
     const columnGap = isVeryLargeBracket ? 88 : BRACKET_COLUMN_GAP;
     const connectorWidth = columnGap;
 
+    const hasRoundHeaders = displayRoundPool.length > 0;
+    const headerOffset = hasRoundHeaders ? ROUND_HEADER_HEIGHT : 0;
     const bracketHeight =
       firstVisibleRoundMatches > 0
-        ? (firstVisibleRoundMatches - 1) * step + cardHeight
-        : cardHeight;
+        ? (firstVisibleRoundMatches - 1) * step + cardHeight + headerOffset
+        : cardHeight + headerOffset;
     const bracketWidth =
       visibleRounds.length > 0
         ? visibleRounds.length * columnWidth + (visibleRounds.length - 1) * columnGap
@@ -299,7 +304,7 @@ export default function TournamentTabs({
       bracketHeight,
       bracketWidth
     };
-  }, [visibleRounds]);
+  }, [visibleRounds, displayRoundPool]);
 
   const bracketScale = useMemo(() => {
     if (bracketViewportWidth <= 0 || bracketLayout.bracketWidth <= 0) {
@@ -644,7 +649,7 @@ export default function TournamentTabs({
         <div className="ml-auto flex flex-col items-end gap-1">
           <button
             className="btn btn-primary"
-            disabled={signupLoading || !signupState.enabled}
+            disabled={signupLoading}
             onClick={() => void submitSignup()}
             type="button"
           >
@@ -658,25 +663,6 @@ export default function TournamentTabs({
 
       {activeTab === "bracket" ? (
         <>
-          {ruleset ? (
-            <div className="mb-3 rounded-lg border border-border/80 bg-[#202329] p-3 shadow-[0_10px_24px_rgba(0,0,0,0.22)]">
-              <p className="text-xs uppercase tracking-[0.12em] text-muted">Round {ruleset.gameName} plan</p>
-              {displayRoundPool.length > 0 ? (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {displayRoundPool.map((label, index) => (
-                    <span
-                      className="rounded-md border border-border/80 bg-[#181A1F] px-2 py-1 text-xs"
-                      key={`${label}-${index}`}
-                    >
-                      R{index + 1}: {label}
-                    </span>
-                  ))}
-                </div>
-              ) : (
-                <p className="mt-2 text-xs text-muted">Round map/arena picks are generated when the bracket is generated.</p>
-              )}
-            </div>
-          ) : null}
           {liveMatches.length === 0 ? (
             <p className="text-sm text-muted">Bracket is not generated yet.</p>
           ) : (
@@ -703,14 +689,29 @@ export default function TournamentTabs({
                         const offset = ((Math.pow(2, roundIndex) - 1) * bracketLayout.step) / 2;
                         const spacing = bracketLayout.step * Math.pow(2, roundIndex);
 
+                        const headerOffset = displayRoundPool.length > 0 ? ROUND_HEADER_HEIGHT : 0;
+                        const roundLabel = roundIndex === visibleRounds.length - 1 ? "Final" : `Round ${roundIndex + 1}`;
+                        const mapLabel = displayRoundPool[roundIndex] ?? null;
+
                         return (
                           <div
                             className="relative shrink-0 overflow-visible"
                             key={round}
                             style={{ width: bracketLayout.columnWidth, height: bracketLayout.bracketHeight }}
                           >
+                            {headerOffset > 0 ? (
+                              <div
+                                className="absolute left-0 right-0 text-center"
+                                style={{ top: 0, height: headerOffset }}
+                              >
+                                <span className="text-[11px] uppercase tracking-[0.12em] text-muted">{roundLabel}</span>
+                                {mapLabel ? (
+                                  <p className="text-xs text-[#A1A1AA]">{mapLabel}</p>
+                                ) : null}
+                              </div>
+                            ) : null}
                             {roundMatches.map((match, matchIndex) => {
-                              const top = offset + matchIndex * spacing;
+                              const top = headerOffset + offset + matchIndex * spacing;
                               const teamA = teamLabel(match.participantATeamName);
                               const teamB = teamLabel(match.participantBTeamName);
                               const outcomeA = outcomeForSlot(match, "A");
@@ -768,7 +769,7 @@ export default function TournamentTabs({
 
                             {roundIndex < visibleRounds.length - 1
                               ? Array.from({ length: Math.floor(roundMatches.length / 2) }, (_, pairIndex) => {
-                                  const topCenter = offset + pairIndex * 2 * spacing + bracketLayout.cardHeight / 2;
+                                  const topCenter = headerOffset + offset + pairIndex * 2 * spacing + bracketLayout.cardHeight / 2;
                                   const bottomCenter = topCenter + spacing;
                                   const connectorHeight = bottomCenter - topCenter;
                                   const midX = 20;

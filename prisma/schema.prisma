@@ -79,6 +79,7 @@ enum NotificationType {
   REPORT_APPROVED
   REPORT_REJECTED
   TOURNAMENT_ADVANCEMENT
+  TOURNAMENT_REMINDER
 }
 
 enum ParticipantSlot {
@@ -170,6 +171,7 @@ model Tournament {
   status          TournamentStatus           @default(DRAFT)
   startsAt        DateTime?
   endsAt          DateTime?
+  reminderSentAt  DateTime?
   createdById     String?
   createdBy       User?                      @relation("TournamentCreator", fields: [createdById], references: [id], onDelete: SetNull)
   createdAt       DateTime                   @default(now())

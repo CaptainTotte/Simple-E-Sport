@@ -14,6 +14,15 @@ function gameBannerSrc(slug: string): string {
   return `/games/banners/${slug}.${ext}`;
 }
 
+function formatStartTime(date: Date): string {
+  return new Intl.DateTimeFormat("sv-SE", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
 function statusLabel(status: TournamentStatus) {
   if (status === TournamentStatus.REGISTRATION_OPEN) {
     return "Open For Registration";
@@ -110,7 +119,7 @@ export default async function HomePage() {
                     {statusLabel(tournament.status)}
                   </div>
                 </div>
-                <div className="flex flex-1 flex-col px-4 pt-4 pb-3">
+                <div className="flex flex-1 flex-col px-4 pt-4 pb-0">
                   <div className="flex-1">
                     <p className="text-xs uppercase tracking-[0.12em] text-muted">{tournament.ruleset?.game.name}</p>
                     <h3 className="mt-1 text-lg font-semibold">{tournament.name}</h3>
@@ -118,8 +127,11 @@ export default async function HomePage() {
                     <p className="text-sm text-muted">
                       Teams: {tournament._count.registrations}/{tournament.teamLimit}
                     </p>
+                    {tournament.startsAt ? (
+                      <p className="text-sm text-muted">Starts: {formatStartTime(tournament.startsAt)}</p>
+                    ) : null}
                   </div>
-                  <div className="mt-3">
+                  <div className="mt-6">
                     <Link className="btn btn-primary inline-flex" href={`/tournaments/${tournament.id}`}>
                       Open Tournament
                     </Link>

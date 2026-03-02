@@ -20,6 +20,15 @@ function gameBannerSrc(slug: string): string {
   return `/games/banners/${slug}.${ext}`;
 }
 
+function formatStartTime(date: Date): string {
+  return new Intl.DateTimeFormat("sv-SE", {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  }).format(date);
+}
+
 function roundPoolFromFrozenConfig(value: unknown): string[] {
   if (!value || typeof value !== "object") {
     return [];
@@ -205,6 +214,9 @@ export default async function TournamentPage({ params }: PageProps) {
             <p className="text-xs text-muted">
               Teams: {tournament._count.registrations}/{tournament.teamLimit}
             </p>
+            {tournament.startsAt ? (
+              <p className="text-xs text-muted">Starts: {formatStartTime(tournament.startsAt)}</p>
+            ) : null}
           </div>
           <div className="absolute right-4 top-4">
             <Link className="btn" href="/">
@@ -219,6 +231,7 @@ export default async function TournamentPage({ params }: PageProps) {
         registeredCount={tournament._count.registrations}
         requiredTeamSize={tournament.ruleset?.mode.teamSize ?? null}
         ruleset={ruleset}
+        startsAt={tournament.startsAt?.toISOString() ?? null}
         teamLimit={tournament.teamLimit}
         teams={teams}
         tournamentId={tournament.id}
