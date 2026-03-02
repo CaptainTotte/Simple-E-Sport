@@ -1,8 +1,10 @@
+import { NotificationType } from "@prisma/client";
 import { NextResponse } from "next/server";
 import { requireActor } from "@/lib/auth";
 import { writeAuditLog } from "@/lib/audit";
 import { adminClearMatchResult, adminSetMatchResult } from "@/lib/bracket";
 import { errorResponse, parseJson } from "@/lib/http";
+import { createNotificationsForUsers } from "@/lib/notifications";
 import { requireTournamentAdmin } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 import { adminMatchResultSchema } from "@/lib/validation";
@@ -72,6 +74,74 @@ export async function PATCH(req: Request, ctx: RouteContext) {
         scoreA: body.scoreA,
         scoreB: body.scoreB
       });
+
+      const shouldNotifyWinner = beforeState.winnerTeamId !== body.winnerTeamId;
+      if (shouldNotifyWinner) {
+        const loserTeamId =
+          body.winnerTeamId === existingMatch.participantATeamId
+            ? existingMatch.participantBTeamId
+            : existingMatch.participantATeamId;
+
+        const winnerMemberUserIds = (
+          await tx.teamMember.findMany({
+            where: {
+              teamId: body.winnerTeamId,
+              userId: {
+                not: null
+              }
+            },
+            select: {
+              userId: true
+            }
+          })
+        )
+          .map((item) => item.userId)
+          .filter((userId): userId is string => Boolean(userId));
+
+        await createNotificationsForUsers(tx, winnerMemberUserIds, {
+          type: NotificationType.TOURNAMENT_ADVANCEMENT,
+          title: existingMatch.nextMatchId ? "Grattis! Ni är vidare" : "Grattis! Ni vann turneringen",
+          body: existingMatch.nextMatchId
+            ? `Teamet gick vidare i ${existingMatch.bracket.tournament.name}.`
+            : `Teamet vann ${existingMatch.bracket.tournament.name}.`,
+          actionUrl: `/tournaments/${existingMatch.bracket.tournamentId}`,
+          metadata: {
+            tournamentId: existingMatch.bracket.tournamentId,
+            matchId
+          }
+        });
+
+        if (loserTeamId) {
+          const loserMemberUserIds = (
+            await tx.teamMember.findMany({
+              where: {
+                teamId: loserTeamId,
+                userId: {
+                  not: null
+                }
+              },
+              select: {
+                userId: true
+              }
+            })
+          )
+            .map((item) => item.userId)
+            .filter((userId): userId is string => Boolean(userId));
+
+          await createNotificationsForUsers(tx, loserMemberUserIds, {
+            type: NotificationType.TOURNAMENT_ADVANCEMENT,
+            title: existingMatch.nextMatchId ? "Tyvärr, ni gick inte vidare" : "Tyvärr, ni förlorade finalen",
+            body: existingMatch.nextMatchId
+              ? `Teamet gick inte vidare i ${existingMatch.bracket.tournament.name}.`
+              : `Teamet slutade tvåa i ${existingMatch.bracket.tournament.name}.`,
+            actionUrl: `/tournaments/${existingMatch.bracket.tournamentId}`,
+            metadata: {
+              tournamentId: existingMatch.bracket.tournamentId,
+              matchId
+            }
+          });
+        }
+      }
 
       await writeAuditLog(tx, {
         actorUserId: actor.id,

@@ -275,7 +275,7 @@ export function NotificationBell() {
 
               return (
                 <article
-                  className={`rounded border border-border/70 bg-[#181A1F] p-2 ${notification.isRead ? "opacity-70" : ""}`}
+                  className="rounded border border-border/80 bg-[#202329] p-2 shadow-[0_10px_24px_rgba(0,0,0,0.2)]"
                   key={notification.id}
                 >
                   <div className="flex items-start justify-between gap-2">

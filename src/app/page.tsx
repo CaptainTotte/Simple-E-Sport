@@ -33,6 +33,16 @@ function statusLabel(status: TournamentStatus) {
   return status;
 }
 
+function statusBadgeClass(status: TournamentStatus) {
+  if (status === TournamentStatus.REGISTRATION_OPEN) {
+    return "border border-[#22C55E]/55 bg-[#22C55E]/20 text-[#86EFAC]";
+  }
+  if (status === TournamentStatus.LIVE) {
+    return "border border-[#EF4444]/70 bg-[#EF4444]/35 text-[#FECACA]";
+  }
+  return "border border-border/70 bg-black/55 text-white";
+}
+
 export default async function HomePage() {
   const [tournaments, completedTournaments] = await Promise.all([
     prisma.tournament.findMany({
@@ -115,7 +125,7 @@ export default async function HomePage() {
                     src={gameBannerSrc(tournament.ruleset?.game.slug ?? "valorant")}
                   />
                   <div className="absolute inset-0 bg-black/40" />
-                  <div className="absolute left-3 top-3 rounded-md bg-black/55 px-2 py-1 text-xs font-medium">
+                  <div className={`absolute left-3 top-3 rounded-md px-2 py-1 text-xs font-medium ${statusBadgeClass(tournament.status)}`}>
                     {statusLabel(tournament.status)}
                   </div>
                 </div>

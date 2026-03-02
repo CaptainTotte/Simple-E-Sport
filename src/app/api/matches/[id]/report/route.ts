@@ -143,6 +143,9 @@ export async function POST(req: Request, ctx: RouteContext) {
           approvedReportId: created.id
         });
 
+        const loserTeamId =
+          body.winnerTeamId === match.participantATeamId ? match.participantBTeamId : match.participantATeamId;
+
         const winnerMemberUserIds = (
           await tx.teamMember.findMany({
             where: {
@@ -172,6 +175,38 @@ export async function POST(req: Request, ctx: RouteContext) {
             matchId
           }
         });
+
+        if (loserTeamId) {
+          const loserMemberUserIds = (
+            await tx.teamMember.findMany({
+              where: {
+                teamId: loserTeamId,
+                userId: {
+                  not: null
+                }
+              },
+              select: {
+                userId: true
+              }
+            })
+          )
+            .map((item) => item.userId)
+            .filter((userId): userId is string => Boolean(userId));
+
+          await createNotificationsForUsers(tx, loserMemberUserIds, {
+            type: NotificationType.TOURNAMENT_ADVANCEMENT,
+            title: match.nextMatchId ? "Tyvärr, ni gick inte vidare" : "Tyvärr, ni förlorade finalen",
+            body: match.nextMatchId
+              ? `Teamet gick inte vidare i ${match.bracket.tournament.name}.`
+              : `Teamet slutade tvåa i ${match.bracket.tournament.name}.`,
+            actionUrl: `/tournaments/${match.bracket.tournamentId}`,
+            matchReportId: created.id,
+            metadata: {
+              tournamentId: match.bracket.tournamentId,
+              matchId
+            }
+          });
+        }
       } else {
         await tx.match.update({
           where: { id: matchId },

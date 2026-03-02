@@ -999,6 +999,11 @@ export async function reviewMatchReport(input: {
       .map((item) => item.userId)
       .filter((userId): userId is string => Boolean(userId));
 
+    const loserTeamId =
+      report.claimedWinnerTeamId === report.match.participantATeamId
+        ? report.match.participantBTeamId
+        : report.match.participantATeamId;
+
     await createNotificationsForUsers(tx, winnerMemberUserIds, {
       type: NotificationType.TOURNAMENT_ADVANCEMENT,
       title: report.match.nextMatchId ? "Grattis! Ni är vidare" : "Grattis! Ni vann turneringen",
@@ -1012,6 +1017,38 @@ export async function reviewMatchReport(input: {
         matchId: report.matchId
       }
     });
+
+    if (loserTeamId) {
+      const loserMemberUserIds = (
+        await tx.teamMember.findMany({
+          where: {
+            teamId: loserTeamId,
+            userId: {
+              not: null
+            }
+          },
+          select: {
+            userId: true
+          }
+        })
+      )
+        .map((item) => item.userId)
+        .filter((userId): userId is string => Boolean(userId));
+
+      await createNotificationsForUsers(tx, loserMemberUserIds, {
+        type: NotificationType.TOURNAMENT_ADVANCEMENT,
+        title: report.match.nextMatchId ? "Tyvärr, ni gick inte vidare" : "Tyvärr, ni förlorade finalen",
+        body: report.match.nextMatchId
+          ? `Teamet gick inte vidare i ${report.match.bracket.tournament.name}.`
+          : `Teamet slutade tvåa i ${report.match.bracket.tournament.name}.`,
+        actionUrl: `/tournaments/${report.match.bracket.tournamentId}`,
+        matchReportId: report.id,
+        metadata: {
+          tournamentId: report.match.bracket.tournamentId,
+          matchId: report.matchId
+        }
+      });
+    }
 
     return { approved: true };
   });
