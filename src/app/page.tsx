@@ -110,7 +110,7 @@ export default async function HomePage() {
                     {statusLabel(tournament.status)}
                   </div>
                 </div>
-                <div className="flex flex-1 flex-col p-4">
+                <div className="flex flex-1 flex-col px-4 pt-4 pb-6">
                   <div className="flex-1">
                     <p className="text-xs uppercase tracking-[0.12em] text-muted">{tournament.ruleset?.game.name}</p>
                     <h3 className="mt-1 text-lg font-semibold">{tournament.name}</h3>
