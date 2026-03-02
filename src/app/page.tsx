@@ -119,7 +119,7 @@ export default async function HomePage() {
                       Teams: {tournament._count.registrations}/{tournament.teamLimit}
                     </p>
                   </div>
-                  <div className="mt-3 flex justify-end">
+                  <div className="mt-3">
                     <Link className="btn btn-primary inline-flex" href={`/tournaments/${tournament.id}`}>
                       Open Tournament
                     </Link>
